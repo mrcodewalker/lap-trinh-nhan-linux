@@ -132,6 +132,9 @@ router.post('/start', (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// GET /api/process/top - Top-like realtime data
+router.get('/top', (req, res) => {
   try {
     const top = spawn('top', ['-b', '-n', '1']);
     let output = '';
