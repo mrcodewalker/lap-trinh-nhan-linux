@@ -6,10 +6,14 @@ const express = require('express');
 const { spawn } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
+const os = require('os');
 const multer = require('multer');
 const logger = require('../utils/logger');
 
 const router = express.Router();
+
+// Resolve the actual home directory of the running user
+const USER_HOME = os.homedir() || `/home/${process.env.USER || 'codewalker'}`;
 
 // Multer setup
 const upload = multer({
@@ -22,7 +26,7 @@ const upload = multer({
 // GET /api/shell/files/list - List files in directory
 router.get('/files/list', async (req, res) => {
   try {
-    const { dir = '/home' } = req.query;
+    const { dir = USER_HOME } = req.query;
 
     if (dir.includes('..')) {
       return res.status(403).json({ error: 'Directory traversal not allowed' });
@@ -222,6 +226,11 @@ router.post('/files/upload', upload.single('file'), (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// GET /api/shell/files/home - Get user home directory
+router.get('/files/home', (req, res) => {
+  res.json({ home: USER_HOME, user: process.env.USER || os.userInfo().username });
 });
 
 // GET /api/shell/files/search - Search files

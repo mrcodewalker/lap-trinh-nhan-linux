@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { RefreshCw, Search, Network, X, Shield, AlertTriangle, Eye } from 'lucide-react'
 import api from '../../utils/api'
@@ -51,9 +51,9 @@ export default function SocketMonitor() {
   const filtered = connections.filter(c => {
     const matchSearch = c.localAddr?.includes(search) || c.peerAddr?.includes(search) || c.proto?.includes(search)
     const matchFilter = filter === 'all'
-      || (filter === 'tcp'  && c.proto?.toLowerCase().includes('tcp'))
-      || (filter === 'udp'  && c.proto?.toLowerCase().includes('udp'))
-      || (filter === 'listen' && c.state === 'LISTEN')
+      || (filter === 'tcp'        && c.proto?.toLowerCase().includes('tcp'))
+      || (filter === 'udp'        && c.proto?.toLowerCase().includes('udp'))
+      || (filter === 'listen'     && c.state === 'LISTEN')
       || (filter === 'suspicious' && isSuspicious(c))
     return matchSearch && matchFilter
   })
@@ -62,16 +62,16 @@ export default function SocketMonitor() {
 
   return (
     <div className="space-y-3">
-      {/* Stats summary */}
+      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Total',       value: connections.length,                                  color: '#22d3ee' },
-          { label: 'Listening',   value: connections.filter(c => c.state === 'LISTEN').length, color: '#34d399' },
-          { label: 'Established', value: connections.filter(c => c.state === 'ESTABLISHED').length, color: '#a78bfa' },
-          { label: 'Suspicious',  value: suspiciousCount, color: suspiciousCount > 0 ? '#f87171' : '#34d399' },
+          { label: 'Total',       value: connections.length,                                        color: 'var(--accent)' },
+          { label: 'Listening',   value: connections.filter(c => c.state === 'LISTEN').length,      color: 'var(--green)' },
+          { label: 'Established', value: connections.filter(c => c.state === 'ESTABLISHED').length, color: 'var(--accent2)' },
+          { label: 'Suspicious',  value: suspiciousCount, color: suspiciousCount > 0 ? 'var(--red)' : 'var(--green)' },
         ].map(({ label, value, color }) => (
           <div key={label} className="card p-3">
-            <p className="text-xs text-white/30 mb-1">{label}</p>
+            <p className="text-xs mb-1" style={{ color: 'var(--text3)' }}>{label}</p>
             <p className="text-xl font-bold" style={{ color }}>{value}</p>
           </div>
         ))}
@@ -80,7 +80,9 @@ export default function SocketMonitor() {
       {/* Stats raw */}
       {stats && (
         <div className="card p-4">
-          <p className="text-xs font-semibold text-white/30 uppercase tracking-wider mb-2">Socket Statistics</p>
+          <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text3)' }}>
+            Socket Statistics
+          </p>
           <pre className="code-block text-xs">{stats}</pre>
         </div>
       )}
@@ -88,29 +90,33 @@ export default function SocketMonitor() {
       {/* Toolbar */}
       <div className="card p-3 flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[160px]">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text3)' }} />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Filter by address or proto..." className="input pl-9 py-2" />
         </div>
         <div className="flex items-center gap-1">
           {['all','tcp','udp','listen','suspicious'].map(f => (
             <button key={f} onClick={() => setFilter(f)}
-              className={`btn-ghost py-1.5 px-2.5 text-xs capitalize ${filter === f ? 'text-cyan-400 border-cyan-500/30' : ''}`}>
+              className="btn-ghost py-1.5 px-2.5 text-xs capitalize"
+              style={filter === f ? { color: 'var(--accent)', borderColor: 'rgba(34,211,238,0.3)' } : {}}>
               {f === 'suspicious' && suspiciousCount > 0
-                ? <span className="flex items-center gap-1"><AlertTriangle size={10} className="text-red-400" />{f}</span>
+                ? <span className="flex items-center gap-1">
+                    <AlertTriangle size={10} style={{ color: 'var(--red)' }} />{f}
+                  </span>
                 : f
               }
             </button>
           ))}
         </div>
         <button onClick={() => setAutoRefresh(v => !v)}
-          className={`btn-ghost py-1.5 px-3 text-xs ${autoRefresh ? 'text-emerald-400 border-emerald-500/30' : ''}`}>
+          className="btn-ghost py-1.5 px-3 text-xs"
+          style={autoRefresh ? { color: 'var(--green)', borderColor: 'rgba(52,211,153,0.3)' } : {}}>
           {autoRefresh ? 'Live' : 'Paused'}
         </button>
         <button onClick={load} className="btn-ghost p-2">
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
         </button>
-        <span className="text-xs text-white/30">{filtered.length}</span>
+        <span className="text-xs" style={{ color: 'var(--text3)' }}>{filtered.length}</span>
       </div>
 
       {/* Table */}
@@ -134,18 +140,19 @@ export default function SocketMonitor() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: i * 0.01 }}
-                    className={`group cursor-pointer ${suspicious ? 'bg-red-500/3' : ''}`}
+                    className="group cursor-pointer"
+                    style={suspicious ? { background: 'rgba(239,68,68,0.04)' } : {}}
                     onClick={() => setModal({ conn })}>
                     <td>
                       <span className={`badge ${conn.proto?.includes('6') ? 'badge-purple' : 'badge-cyan'} text-[10px]`}>
                         {conn.proto}
                       </span>
                     </td>
-                    <td className="font-mono text-xs text-white/70">
-                      {suspicious && <AlertTriangle size={10} className="inline text-red-400 mr-1" />}
+                    <td className="font-mono text-xs" style={{ color: 'var(--text2)' }}>
+                      {suspicious && <AlertTriangle size={10} className="inline mr-1" style={{ color: 'var(--red)' }} />}
                       {conn.localAddr}
                     </td>
-                    <td className="font-mono text-xs text-white/45">{conn.peerAddr}</td>
+                    <td className="font-mono text-xs" style={{ color: 'var(--text3)' }}>{conn.peerAddr}</td>
                     <td>
                       {conn.state && (
                         <span className={`badge ${stateColor(conn.state)} text-[10px]`}>{conn.state}</span>
@@ -153,7 +160,8 @@ export default function SocketMonitor() {
                     </td>
                     <td className="text-right">
                       <button onClick={e => { e.stopPropagation(); setModal({ conn }) }}
-                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-cyan-500/15 text-cyan-400/50 hover:text-cyan-400 transition-all">
+                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg transition-all"
+                        style={{ color: 'var(--accent)' }}>
                         <Eye size={12} />
                       </button>
                     </td>
@@ -165,8 +173,8 @@ export default function SocketMonitor() {
         </div>
         {filtered.length === 0 && (
           <div className="py-12 text-center">
-            <Network size={32} className="mx-auto text-white/10 mb-3" />
-            <p className="text-xs text-white/30">No connections match filter</p>
+            <Network size={32} className="mx-auto mb-3" style={{ color: 'var(--border)' }} />
+            <p className="text-xs" style={{ color: 'var(--text3)' }}>No connections match filter</p>
           </div>
         )}
       </div>
@@ -181,15 +189,15 @@ export default function SocketMonitor() {
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
                   {isSuspicious(modal.conn)
-                    ? <AlertTriangle size={18} className="text-red-400" />
-                    : <Shield size={18} className="text-emerald-400" />
+                    ? <AlertTriangle size={18} style={{ color: 'var(--red)' }} />
+                    : <Shield size={18} style={{ color: 'var(--green)' }} />
                   }
-                  <p className="font-semibold text-white text-sm">Connection Detail</p>
+                  <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>Connection Detail</p>
                 </div>
-                <button onClick={() => setModal(null)}><X size={16} className="text-white/30" /></button>
+                <button onClick={() => setModal(null)}><X size={16} style={{ color: 'var(--text3)' }} /></button>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-1">
                 {[
                   ['Protocol',      modal.conn.proto],
                   ['Local Address', modal.conn.localAddr],
@@ -198,16 +206,17 @@ export default function SocketMonitor() {
                   ['Recv-Q',        modal.conn.recvQ],
                   ['Send-Q',        modal.conn.sendQ],
                 ].map(([k, v]) => v && (
-                  <div key={k} className="flex items-center justify-between py-2 border-b border-white/5">
-                    <span className="text-xs text-white/35">{k}</span>
-                    <span className="text-xs font-mono text-white/75">{v}</span>
+                  <div key={k} className="flex items-center justify-between py-2"
+                    style={{ borderBottom: '1px solid var(--border2)' }}>
+                    <span className="text-xs" style={{ color: 'var(--text3)' }}>{k}</span>
+                    <span className="text-xs font-mono" style={{ color: 'var(--text2)' }}>{v}</span>
                   </div>
                 ))}
               </div>
 
               {isSuspicious(modal.conn) && (
-                <div className="mt-4 px-4 py-3 rounded-xl text-xs text-red-400 flex items-center gap-2"
-                  style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
+                <div className="mt-4 px-4 py-3 rounded-xl text-xs flex items-center gap-2"
+                  style={{ color: 'var(--red)', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
                   <AlertTriangle size={13} />
                   This port is commonly associated with suspicious activity
                 </div>

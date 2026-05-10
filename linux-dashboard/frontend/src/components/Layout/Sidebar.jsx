@@ -90,8 +90,7 @@ export default function Sidebar() {
                   boxShadow: `0 0 16px ${item.glow}`,
                 } : {
                   border: '1px solid transparent',
-                }}
-              >
+                }}              >
                 {/* Icon */}
                 <div
                   className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-200"

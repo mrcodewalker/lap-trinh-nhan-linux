@@ -74,7 +74,7 @@ export default function Header() {
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
         >
           {theme === 'dark'
-            ? <Sun size={15} style={{ color: '#fbbf24' }} />
+            ? <Sun  size={15} style={{ color: '#fbbf24' }} />
             : <Moon size={15} style={{ color: '#7c3aed' }} />
           }
         </motion.button>

@@ -1,7 +1,6 @@
 import { createContext, useContext } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
-// Context to pass value/onChange without polluting DOM props
 const TabsCtx = createContext({ value: '', onChange: () => {} })
 
 export function Tabs({ value, onValueChange, children, className = '' }) {
@@ -14,7 +13,10 @@ export function Tabs({ value, onValueChange, children, className = '' }) {
 
 export function TabsList({ children, className = '' }) {
   return (
-    <div className={`flex gap-1 p-1 rounded-xl bg-black/30 border border-white/5 flex-wrap ${className}`}>
+    <div
+      className={`flex gap-1 p-1 rounded-xl flex-wrap ${className}`}
+      style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+    >
       {children}
     </div>
   )
@@ -28,13 +30,17 @@ export function TabsTrigger({ children, value, className = '' }) {
     <motion.button
       whileTap={{ scale: 0.97 }}
       onClick={() => ctx.onChange(value)}
-      className={[
-        'relative px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 outline-none',
-        isActive
-          ? 'text-black bg-gradient-to-r from-cyan-400 to-violet-500 shadow-lg shadow-cyan-500/25'
-          : 'text-white/50 hover:text-white/80 hover:bg-white/5',
-        className,
-      ].join(' ')}
+      className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 outline-none ${className}`}
+      style={isActive ? {
+        background: 'linear-gradient(135deg, #06b6d4, #8b5cf6)',
+        color: 'var(--tab-active-text)',
+        boxShadow: '0 2px 12px rgba(6,182,212,0.25)',
+      } : {
+        color: 'var(--text3)',
+        background: 'transparent',
+      }}
+      onMouseEnter={e => { if (!isActive) e.currentTarget.style.color = 'var(--text2)' }}
+      onMouseLeave={e => { if (!isActive) e.currentTarget.style.color = 'var(--text3)' }}
     >
       {children}
     </motion.button>

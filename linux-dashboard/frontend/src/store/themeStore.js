@@ -1,7 +1,13 @@
 import { create } from 'zustand'
 
-const saved = localStorage.getItem('theme') || 'dark'
-if (saved === 'light') document.documentElement.classList.add('light')
+// Default is LIGHT mode
+const saved = localStorage.getItem('theme') || 'light'
+// Apply immediately before React renders
+if (saved === 'light') {
+  document.documentElement.classList.add('light')
+} else {
+  document.documentElement.classList.remove('light')
+}
 
 export const useThemeStore = create((set) => ({
   theme: saved,

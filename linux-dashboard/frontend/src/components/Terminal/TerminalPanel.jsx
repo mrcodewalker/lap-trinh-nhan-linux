@@ -123,20 +123,23 @@ export default function TerminalPanel() {
       <div ref={termRef} className="flex-1" style={{ minHeight: '380px' }} />
 
       {/* Input */}
-      <div className="flex items-center gap-2 px-4 py-3 border-t border-white/5 bg-black/20">
-        <span className="text-emerald-400 font-mono text-sm flex-shrink-0">❯</span>
+      <div className="flex items-center gap-2 px-4 py-3"
+        style={{ borderTop: '1px solid var(--border2)', background: 'rgba(0,0,0,0.15)' }}>
+        <span className="mono text-sm flex-shrink-0" style={{ color: 'var(--green)' }}>❯</span>
         <input
           value={cmd}
           onChange={e => setCmd(e.target.value)}
           onKeyDown={onKey}
           placeholder="Enter command..."
-          className="flex-1 bg-transparent outline-none font-mono text-sm text-white/80 placeholder-white/20"
+          className="flex-1 bg-transparent outline-none mono text-sm"
+          style={{ color: 'var(--text)', caretColor: 'var(--accent)' }}
         />
         <motion.button
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
           onClick={run}
-          className="p-1.5 rounded-lg hover:bg-cyan-500/15 text-cyan-400/50 hover:text-cyan-400 transition-colors"
+          className="p-1.5 rounded-lg transition-colors"
+          style={{ color: 'var(--accent)' }}
         >
           <Send size={14} />
         </motion.button>
