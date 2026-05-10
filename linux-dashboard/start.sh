@@ -1,6 +1,6 @@
 #!/bin/bash
 # ╔══════════════════════════════════════════════════════╗
-# ║  Linux Dashboard - One-click Startup Script         ║
+# ║  Linux Dashboard — One-click Startup Script         ║
 # ║  Usage: bash start.sh                               ║
 # ╚══════════════════════════════════════════════════════╝
 
@@ -11,6 +11,9 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
+
+FRONTEND_URL="http://localhost:5173"
+BACKEND_PORT=3001
 
 echo -e "${CYAN}"
 echo "  ██╗     ██╗███╗   ██╗██╗   ██╗██╗  ██╗"
@@ -34,27 +37,30 @@ fi
 NODE_VER=$(node -v)
 echo -e "${GREEN}✓ Node.js ${NODE_VER}${NC}"
 
+# ── Resolve script directory (works regardless of where you call it from) ──
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # ── Install backend deps ───────────────────────────────
 echo ""
 echo -e "${YELLOW}▶ Installing backend dependencies...${NC}"
-cd "$(dirname "$0")/backend"
+cd "$SCRIPT_DIR/backend"
 npm install --silent
 echo -e "${GREEN}✓ Backend ready${NC}"
 
 # ── Install frontend deps ──────────────────────────────
 echo ""
 echo -e "${YELLOW}▶ Installing frontend dependencies...${NC}"
-cd ../frontend
+cd "$SCRIPT_DIR/frontend"
 npm install --silent
 echo -e "${GREEN}✓ Frontend ready${NC}"
 
 # ── Create .env if missing ─────────────────────────────
-cd ../backend
+cd "$SCRIPT_DIR/backend"
 if [ ! -f .env ]; then
-  cp .env.example .env 2>/dev/null || cat > .env << 'EOF'
+  cat > .env << EOF
 NODE_ENV=development
-PORT=3001
-FRONTEND_URL=http://localhost:5173
+PORT=${BACKEND_PORT}
+FRONTEND_URL=${FRONTEND_URL}
 LOG_LEVEL=info
 EOF
   echo -e "${GREEN}✓ Created .env${NC}"
@@ -66,33 +72,62 @@ echo -e "${GREEN}✓ Directories ready${NC}"
 
 # ── Start backend ──────────────────────────────────────
 echo ""
-echo -e "${YELLOW}▶ Starting backend on port 3001...${NC}"
+echo -e "${YELLOW}▶ Starting backend on port ${BACKEND_PORT}...${NC}"
 npm run dev &
 BACKEND_PID=$!
 sleep 2
 
-# Check backend started
-if kill -0 $BACKEND_PID 2>/dev/null; then
-  echo -e "${GREEN}✓ Backend running (PID: $BACKEND_PID)${NC}"
-else
+if ! kill -0 $BACKEND_PID 2>/dev/null; then
   echo -e "${RED}✗ Backend failed to start${NC}"
   exit 1
 fi
+echo -e "${GREEN}✓ Backend running (PID: $BACKEND_PID)${NC}"
 
 # ── Start frontend ─────────────────────────────────────
 echo ""
 echo -e "${YELLOW}▶ Starting frontend on port 5173...${NC}"
-cd ../frontend
+cd "$SCRIPT_DIR/frontend"
 npm run dev &
 FRONTEND_PID=$!
-sleep 3
 
+# ── Wait for frontend to be ready, then open browser ──
+echo -e "${YELLOW}▶ Waiting for frontend to be ready...${NC}"
+MAX_WAIT=30
+WAITED=0
+while ! curl -s "$FRONTEND_URL" > /dev/null 2>&1; do
+  sleep 1
+  WAITED=$((WAITED + 1))
+  if [ $WAITED -ge $MAX_WAIT ]; then
+    echo -e "${YELLOW}⚠ Frontend taking longer than expected, opening browser anyway...${NC}"
+    break
+  fi
+done
+
+# ── Open browser ───────────────────────────────────────
+echo -e "${YELLOW}▶ Opening browser...${NC}"
+if command -v firefox &> /dev/null; then
+  firefox "$FRONTEND_URL" &> /dev/null &
+  echo -e "${GREEN}✓ Firefox opened${NC}"
+elif command -v google-chrome &> /dev/null; then
+  google-chrome "$FRONTEND_URL" &> /dev/null &
+  echo -e "${GREEN}✓ Chrome opened${NC}"
+elif command -v chromium-browser &> /dev/null; then
+  chromium-browser "$FRONTEND_URL" &> /dev/null &
+  echo -e "${GREEN}✓ Chromium opened${NC}"
+elif command -v xdg-open &> /dev/null; then
+  xdg-open "$FRONTEND_URL" &> /dev/null &
+  echo -e "${GREEN}✓ Browser opened via xdg-open${NC}"
+else
+  echo -e "${YELLOW}⚠ No browser found. Open manually: ${FRONTEND_URL}${NC}"
+fi
+
+# ── Print summary ──────────────────────────────────────
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║  Dashboard is running!                   ║${NC}"
 echo -e "${GREEN}║                                          ║${NC}"
-echo -e "${GREEN}║  Frontend: http://localhost:5173         ║${NC}"
-echo -e "${GREEN}║  Backend:  http://localhost:3001/api     ║${NC}"
+echo -e "${GREEN}║  Frontend: ${FRONTEND_URL}         ║${NC}"
+echo -e "${GREEN}║  Backend:  http://localhost:${BACKEND_PORT}/api     ║${NC}"
 echo -e "${GREEN}║                                          ║${NC}"
 echo -e "${GREEN}║  Press Ctrl+C to stop all services       ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════╝${NC}"
@@ -110,5 +145,4 @@ cleanup() {
 
 trap cleanup SIGINT SIGTERM
 
-# Wait for both processes
 wait $BACKEND_PID $FRONTEND_PID
