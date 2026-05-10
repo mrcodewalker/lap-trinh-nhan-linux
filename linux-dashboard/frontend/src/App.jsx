@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useSocketStore } from './store/socketStore'
 import Shell from './pages/Shell'
@@ -9,11 +9,11 @@ import Header from './components/Layout/Header'
 
 function MainLayout({ children }) {
   return (
-    <div className="flex h-screen bg-cyber-dark">
+    <div className="flex h-screen" style={{ background: 'var(--bg)' }}>
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto" style={{ background: 'var(--bg)' }}>
           {children}
         </main>
       </div>
