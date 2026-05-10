@@ -100,7 +100,7 @@ router.post('/insmod', (req, res) => {
       args.push(...params.split(' '));
     }
 
-    const insmod = spawn('insmod', args);
+    const insmod = spawn('sudo', ['insmod', args[0], ...args.slice(1)]);
     let error = '';
 
     insmod.stderr.on('data', (data) => {
@@ -130,7 +130,7 @@ router.post('/rmmod', (req, res) => {
 
     logger.info(`Unloading kernel module: ${module}`);
 
-    const rmmod = spawn('rmmod', [module]);
+    const rmmod = spawn('sudo', ['rmmod', module]);
     let error = '';
 
     rmmod.stderr.on('data', (data) => {
@@ -370,7 +370,7 @@ clean:
         
         if (autoLoad) {
           // Load module
-          const insmod = spawn('insmod', [koFile]);
+          const insmod = spawn('sudo', ['insmod', koFile]);
           let loadError = '';
 
           insmod.stderr.on('data', (data) => {

@@ -89,7 +89,7 @@ function initSocketHandlers(io) {
           }
 
           kEmit('log', { line: `[insmod] Loading ${moduleName}.ko into kernel...`, level: 'info' });
-          const insmod = spawn('insmod', [koFile]);
+          const insmod = spawn('sudo', ['insmod', koFile]);
           let insmodErr = '';
           insmod.stderr.on('data', (d) => { insmodErr += d.toString(); });
           insmod.on('close', (lc) => {
