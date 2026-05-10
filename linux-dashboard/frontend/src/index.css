@@ -1,0 +1,124 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-cyber-dark text-white font-inter overflow-x-hidden;
+  background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-cyber-navy;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-cyber-purple rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-cyber-cyan;
+}
+
+/* Glass morphism effect */
+.glass {
+  @apply backdrop-blur-xl bg-white/5 border border-white/10 rounded-lg;
+}
+
+.glass-dark {
+  @apply backdrop-blur-xl bg-black/20 border border-white/5 rounded-lg;
+}
+
+/* Neon glow effects */
+.neon-glow-cyan {
+  @apply shadow-neon-cyan;
+}
+
+.neon-glow-purple {
+  @apply shadow-neon-purple;
+}
+
+.neon-glow-pink {
+  @apply shadow-neon-pink;
+}
+
+/* Gradient text */
+.gradient-text {
+  @apply bg-gradient-to-r from-cyber-cyan via-cyber-purple to-neon-pink bg-clip-text text-transparent;
+}
+
+/* Smooth transitions */
+.transition-smooth {
+  @apply transition-all duration-300 ease-out;
+}
+
+/* Terminal styling */
+.terminal {
+  @apply font-mono text-sm bg-black/50 rounded-lg p-4 border border-cyber-cyan/30;
+}
+
+.terminal-line {
+  @apply text-neon-green;
+}
+
+.terminal-error {
+  @apply text-neon-pink;
+}
+
+.terminal-warning {
+  @apply text-yellow-400;
+}
+
+/* Loading animation */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.shimmer {
+  animation: shimmer 2s infinite;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.1) 20%,
+    rgba(255, 255, 255, 0) 40%
+  );
+  background-size: 1000px 100%;
+}
+
+/* Smooth page transitions */
+.page-enter {
+  animation: pageEnter 0.3s ease-out;
+}
+
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
