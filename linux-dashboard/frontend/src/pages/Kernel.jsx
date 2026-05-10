@@ -1,19 +1,19 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/UI/Tabs'
 import { Cpu, ScrollText, Hammer } from 'lucide-react'
 import ModuleManager from '../components/Kernel/ModuleManager'
 import KernelLogs from '../components/Kernel/KernelLogs'
-import ModuleBuilder from '../components/Kernel/ModuleBuilder'
+import KernelBuilder from '../components/Kernel/KernelBuilder'
 
 const TABS = [
-  { value: 'modules',  label: 'Modules',  icon: Cpu },
-  { value: 'logs',     label: 'Kernel Logs', icon: ScrollText },
-  { value: 'builder',  label: 'Builder',  icon: Hammer },
+  { value: 'modules', label: 'Modules',     icon: Cpu },
+  { value: 'builder', label: 'Build & Run', icon: Hammer },
+  { value: 'logs',    label: 'Kernel Logs', icon: ScrollText },
 ]
 
 export default function Kernel() {
-  const [activeTab, setActiveTab] = useState('modules')
+  const [activeTab, setActiveTab] = useState('builder')
 
   return (
     <motion.div
@@ -36,8 +36,8 @@ export default function Kernel() {
 
         <div className="flex-1 min-h-0 overflow-auto">
           <TabsContent value="modules"><ModuleManager /></TabsContent>
+          <TabsContent value="builder"><KernelBuilder /></TabsContent>
           <TabsContent value="logs"><KernelLogs /></TabsContent>
-          <TabsContent value="builder"><ModuleBuilder /></TabsContent>
         </div>
       </Tabs>
     </motion.div>
