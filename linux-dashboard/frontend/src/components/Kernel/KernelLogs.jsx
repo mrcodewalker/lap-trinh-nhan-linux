@@ -1,75 +1,116 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { RefreshCw, Search } from 'lucide-react'
+import { RefreshCw, Search, X, Download, ChevronDown } from 'lucide-react'
 import api from '../../utils/api'
 
+const LINE_COLORS = {
+  error:   'text-red-400',
+  warn:    'text-yellow-400',
+  info:    'text-cyan-400/80',
+  default: 'text-white/60',
+}
+
+const colorLine = (line) => {
+  const l = line.toLowerCase()
+  if (l.includes('error') || l.includes('fail') || l.includes('bug')) return LINE_COLORS.error
+  if (l.includes('warn') || l.includes('warning')) return LINE_COLORS.warn
+  if (l.includes('info') || l.includes('loaded') || l.includes('success')) return LINE_COLORS.info
+  return LINE_COLORS.default
+}
+
 export default function KernelLogs() {
-  const [logs, setLogs] = useState('')
+  const [logs, setLogs]       = useState('')
+  const [filter, setFilter]   = useState('')
+  const [lines, setLines]     = useState(100)
   const [loading, setLoading] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [autoScroll, setAutoScroll] = useState(true)
+  const bottomRef = useRef(null)
 
   useEffect(() => {
-    loadLogs()
-    const interval = setInterval(loadLogs, 5000)
-    return () => clearInterval(interval)
-  }, [])
+    load()
+    const t = setInterval(load, 5000)
+    return () => clearInterval(t)
+  }, [lines])
 
-  const loadLogs = async () => {
-    try {
-      const response = await api.get('/kernel/dmesg', { params: { lines: 100 } })
-      setLogs(response.data.messages)
-    } catch (err) {
-      console.error('Failed to load kernel logs')
+  useEffect(() => {
+    if (autoScroll && bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth' })
     }
+  }, [logs, autoScroll])
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const r = await api.get('/kernel/dmesg', { params: { lines } })
+      setLogs(r.data.messages || '')
+    } catch (e) { console.error('Failed to load kernel logs') }
+    finally { setLoading(false) }
   }
 
-  const filteredLogs = logs
-    .split('\n')
-    .filter(line => line.toLowerCase().includes(searchQuery.toLowerCase()))
-    .join('\n')
+  const download = () => {
+    const blob = new Blob([logs], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = 'dmesg.log'; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const filteredLines = logs.split('\n').filter(l =>
+    !filter || l.toLowerCase().includes(filter.toLowerCase())
+  )
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="space-y-4"
-    >
-      {/* Header */}
-      <div className="glass rounded-lg border border-cyber-cyan/20 p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-cyber-cyan">Kernel Messages (dmesg)</h3>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            onClick={loadLogs}
-            className="p-2 rounded-lg hover:glass transition-smooth"
-          >
-            <RefreshCw size={18} className="text-cyber-cyan" />
-          </motion.button>
+    <div className="space-y-3">
+      {/* Toolbar */}
+      <div className="card p-3 flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[160px]">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
+          <input value={filter} onChange={e => setFilter(e.target.value)}
+            placeholder="Filter logs..." className="input pl-9" />
         </div>
-
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-3 text-cyber-cyan/50" size={18} />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Filter logs..."
-            className="w-full pl-10 pr-4 py-2 bg-black/30 border border-cyber-cyan/30 rounded-lg focus:border-cyber-cyan focus:outline-none transition-smooth text-white placeholder-cyber-cyan/30"
-          />
+        <div className="flex items-center gap-1.5">
+          {[50, 100, 200, 500].map(n => (
+            <button key={n} onClick={() => setLines(n)}
+              className={`btn-ghost py-1.5 px-3 text-xs ${lines === n ? 'text-cyan-400 border-cyan-500/30' : ''}`}>
+              {n}
+            </button>
+          ))}
         </div>
+        <button onClick={() => setAutoScroll(!autoScroll)}
+          className={`btn-ghost py-1.5 px-3 text-xs flex items-center gap-1 ${autoScroll ? 'text-cyan-400 border-cyan-500/30' : ''}`}>
+          <ChevronDown size={12} /> Auto
+        </button>
+        <button onClick={download} className="btn-ghost p-2" data-tooltip="Download">
+          <Download size={13} />
+        </button>
+        <button onClick={load} className="btn-ghost p-2">
+          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+        </button>
+        <span className="text-xs text-white/30">{filteredLines.length} lines</span>
       </div>
 
-      {/* Logs */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="glass rounded-lg border border-cyber-cyan/20 p-4"
-      >
-        <pre className="font-mono text-xs text-neon-green overflow-auto max-h-96 whitespace-pre-wrap break-words">
-          {filteredLogs || 'No logs available'}
-        </pre>
-      </motion.div>
-    </motion.div>
+      {/* Log viewer */}
+      <div className="card overflow-hidden">
+        <div className="terminal-header">
+          <span className="terminal-dot bg-red-400/60" />
+          <span className="terminal-dot bg-yellow-400/60" />
+          <span className="terminal-dot bg-green-400/60" />
+          <span className="text-xs text-white/30 ml-2 font-mono">dmesg</span>
+          {loading && <RefreshCw size={11} className="ml-auto text-white/30 animate-spin" />}
+        </div>
+        <div className="max-h-[500px] overflow-y-auto p-4 font-mono text-xs space-y-0.5">
+          {filteredLines.length === 0 ? (
+            <p className="text-white/30 text-center py-8">No logs available</p>
+          ) : (
+            filteredLines.map((line, i) => (
+              <div key={i} className={`leading-relaxed ${colorLine(line)}`}>
+                {line}
+              </div>
+            ))
+          )}
+          <div ref={bottomRef} />
+        </div>
+      </div>
+    </div>
   )
 }

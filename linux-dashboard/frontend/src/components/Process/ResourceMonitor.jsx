@@ -1,140 +1,137 @@
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { RefreshCw } from 'lucide-react'
 import api from '../../utils/api'
 
+const fmt = (bytes) => {
+  const gb = bytes / (1024 ** 3)
+  return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(bytes / (1024 ** 2)).toFixed(0)} MB`
+}
+
+const CustomTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="card px-3 py-2 text-xs">
+      <p className="text-white/40 mb-1">{label}</p>
+      {payload.map((p, i) => (
+        <p key={i} style={{ color: p.color }}>{p.name}: {p.value?.toFixed ? p.value.toFixed(1) : p.value}</p>
+      ))}
+    </div>
+  )
+}
+
 export default function ResourceMonitor() {
-  const [systemInfo, setSystemInfo] = useState(null)
-  const [memoryData, setMemoryData] = useState([])
-  const [diskData, setDiskData] = useState([])
+  const [info, setInfo]       = useState(null)
+  const [disks, setDisks]     = useState([])
+  const [memHistory, setMemHistory] = useState([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    loadSystemInfo()
-    const interval = setInterval(loadSystemInfo, 2000)
-    return () => clearInterval(interval)
+    load()
+    const t = setInterval(load, 2000)
+    return () => clearInterval(t)
   }, [])
 
-  const loadSystemInfo = async () => {
+  const load = async () => {
     try {
-      const [sysRes, memRes, diskRes] = await Promise.all([
-        api.get('/system/info'),
-        api.get('/system/memory'),
-        api.get('/system/disk')
+      const [resR, diskR] = await Promise.all([
+        api.get('/process/resources'),
+        api.get('/process/disk'),
       ])
-
-      setSystemInfo(sysRes.data)
-      setMemoryData(prev => [...prev.slice(-19), {
-        time: new Date().toLocaleTimeString(),
-        used: memRes.data.used / (1024 * 1024 * 1024),
-        total: memRes.data.total / (1024 * 1024 * 1024)
+      setInfo(resR.data)
+      setDisks(diskR.data.disks || [])
+      const usedPct = parseFloat(resR.data.memory?.percentage || 0)
+      setMemHistory(prev => [...prev.slice(-19), {
+        t: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        mem: usedPct,
+        load: resR.data.loadAverage?.[0] || 0,
       }])
-      setDiskData(diskRes.data.disks)
-    } catch (err) {
-      console.error('Failed to load system info')
-    }
+    } catch (e) { console.error('Resource load failed') }
   }
 
-  if (!systemInfo) {
-    return <div className="text-center text-cyber-cyan/60">Loading...</div>
-  }
+  if (!info) return <div className="py-12 text-center text-xs text-white/30">Loading resources...</div>
 
-  const memUsagePercent = ((systemInfo.totalMemory - systemInfo.freeMemory) / systemInfo.totalMemory * 100).toFixed(1)
+  const memPct = parseFloat(info.memory?.percentage || 0)
+
+  const StatCard = ({ label, value, sub, color = '#22d3ee' }) => (
+    <div className="card p-4">
+      <p className="text-xs text-white/30 mb-1">{label}</p>
+      <p className="text-2xl font-bold" style={{ color }}>{value}</p>
+      {sub && <p className="text-xs text-white/25 mt-1">{sub}</p>}
+    </div>
+  )
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="space-y-4"
-    >
-      {/* System Info Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass rounded-lg border border-cyber-cyan/20 p-4"
-        >
-          <p className="text-xs text-cyber-cyan/60 mb-2">CPU Cores</p>
-          <p className="text-2xl font-bold text-neon-green">{systemInfo.cpus}</p>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="glass rounded-lg border border-cyber-cyan/20 p-4"
-        >
-          <p className="text-xs text-cyber-cyan/60 mb-2">Memory Usage</p>
-          <p className="text-2xl font-bold text-cyber-purple">{memUsagePercent}%</p>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="glass rounded-lg border border-cyber-cyan/20 p-4"
-        >
-          <p className="text-xs text-cyber-cyan/60 mb-2">Uptime</p>
-          <p className="text-2xl font-bold text-cyber-cyan">{(systemInfo.uptime / 3600).toFixed(1)}h</p>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="glass rounded-lg border border-cyber-cyan/20 p-4"
-        >
-          <p className="text-xs text-cyber-cyan/60 mb-2">Load Average</p>
-          <p className="text-2xl font-bold text-neon-pink">{systemInfo.loadAverage[0].toFixed(2)}</p>
-        </motion.div>
+    <div className="space-y-4">
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard label="CPU Cores" value={info.cpu?.count} sub={info.cpu?.model?.split(' ').slice(-2).join(' ')} color="#22d3ee" />
+        <StatCard label="Memory Used" value={`${memPct}%`} sub={`${fmt(info.memory?.used)} / ${fmt(info.memory?.total)}`} color="#a78bfa" />
+        <StatCard label="Uptime" value={`${(info.uptime / 3600).toFixed(1)}h`} sub={info.hostname} color="#34d399" />
+        <StatCard label="Load Avg" value={info.loadAverage?.[0]?.toFixed(2)} sub={`${info.loadAverage?.[1]?.toFixed(2)} · ${info.loadAverage?.[2]?.toFixed(2)}`} color="#f472b6" />
       </div>
 
-      {/* Memory Chart */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
-        className="glass rounded-lg border border-cyber-cyan/20 p-4"
-      >
-        <h3 className="text-lg font-bold text-cyber-cyan mb-4">Memory Usage</h3>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={memoryData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 245, 255, 0.1)" />
-            <XAxis dataKey="time" stroke="rgba(0, 245, 255, 0.5)" />
-            <YAxis stroke="rgba(0, 245, 255, 0.5)" />
-            <Tooltip contentStyle={{ backgroundColor: '#0a0e27', border: '1px solid rgba(0, 245, 255, 0.3)' }} />
-            <Line type="monotone" dataKey="used" stroke="#00f5ff" dot={false} />
+      {/* Memory chart */}
+      <div className="card p-4">
+        <p className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-4">Memory Usage %</p>
+        <ResponsiveContainer width="100%" height={180}>
+          <AreaChart data={memHistory}>
+            <defs>
+              <linearGradient id="memGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#a78bfa" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+            <XAxis dataKey="t" tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.25)' }} />
+            <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.25)' }} />
+            <Tooltip content={<CustomTooltip />} />
+            <Area type="monotone" dataKey="mem" name="Memory %" stroke="#a78bfa" fill="url(#memGrad)" strokeWidth={2} dot={false} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Load average chart */}
+      <div className="card p-4">
+        <p className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-4">Load Average</p>
+        <ResponsiveContainer width="100%" height={140}>
+          <LineChart data={memHistory}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+            <XAxis dataKey="t" tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.25)' }} />
+            <YAxis tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.25)' }} />
+            <Tooltip content={<CustomTooltip />} />
+            <Line type="monotone" dataKey="load" name="Load" stroke="#22d3ee" strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>
-      </motion.div>
+      </div>
 
-      {/* Disk Usage */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.5 }}
-        className="glass rounded-lg border border-cyber-cyan/20 p-4"
-      >
-        <h3 className="text-lg font-bold text-cyber-cyan mb-4">Disk Usage</h3>
+      {/* Disk usage */}
+      <div className="card p-4">
+        <p className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-4">Disk Usage</p>
         <div className="space-y-3">
-          {diskData.map((disk, idx) => (
-            <div key={idx}>
-              <div className="flex justify-between mb-1">
-                <span className="text-sm text-cyber-cyan/80">{disk.filesystem}</span>
-                <span className="text-sm text-neon-green">{disk.percentage}</span>
+          {disks.filter(d => d.filesystem && d.percentage).map((disk, i) => {
+            const pct = parseInt(disk.percentage)
+            const color = pct > 90 ? '#f87171' : pct > 70 ? '#fbbf24' : '#34d399'
+            return (
+              <div key={i}>
+                <div className="flex justify-between mb-1.5">
+                  <span className="text-xs font-mono text-white/60 truncate max-w-[200px]">{disk.filesystem}</span>
+                  <div className="flex items-center gap-3 text-xs text-white/40">
+                    <span>{disk.used} / {disk.size}</span>
+                    <span className="font-semibold" style={{ color }}>{disk.percentage}</span>
+                  </div>
+                </div>
+                <div className="progress-bar">
+                  <motion.div className="progress-fill" initial={{ width: 0 }}
+                    animate={{ width: disk.percentage }}
+                    style={{ background: `linear-gradient(90deg, ${color}80, ${color})` }} />
+                </div>
               </div>
-              <div className="w-full h-2 bg-black/30 rounded-full overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: disk.percentage }}
-                  transition={{ duration: 0.5 }}
-                  className="h-full bg-gradient-to-r from-cyber-cyan to-cyber-purple"
-                />
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   )
 }

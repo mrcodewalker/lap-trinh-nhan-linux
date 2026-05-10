@@ -445,8 +445,43 @@ static void __exit module_exit_func(void) {
 module_init(module_init_func);
 module_exit(module_exit_func);
 `;
-
   res.json({ template });
+});
+
+// GET /api/kernel/samples - List kernel sample files
+router.get('/samples', async (req, res) => {
+  try {
+    const samplesDir = path.join(__dirname, '../../../kernel-samples');
+    const files = await fs.readdir(samplesDir);
+    const cFiles = files.filter(f => f.endsWith('.c'));
+    const samples = await Promise.all(cFiles.map(async (file) => {
+      const content = await fs.readFile(path.join(samplesDir, file), 'utf-8');
+      const descMatch = content.match(/MODULE_DESCRIPTION\("([^"]+)"\)/);
+      return {
+        filename: file,
+        name: file.replace('.c', ''),
+        description: descMatch ? descMatch[1] : file,
+        size: content.length,
+        lines: content.split('\n').length,
+      };
+    }));
+    res.json({ samples });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/kernel/sample/:name - Get sample source code
+router.get('/sample/:name', async (req, res) => {
+  try {
+    const { name } = req.params;
+    const safeName = path.basename(name).replace(/[^a-zA-Z0-9_]/g, '');
+    const filePath = path.join(__dirname, '../../../kernel-samples', `${safeName}.c`);
+    const content = await fs.readFile(filePath, 'utf-8');
+    res.json({ code: content, filename: `${safeName}.c` });
+  } catch (err) {
+    res.status(404).json({ error: 'Sample not found' });
+  }
 });
 
 module.exports = router;

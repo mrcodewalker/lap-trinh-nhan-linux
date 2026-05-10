@@ -112,8 +112,26 @@ router.post('/kill', (req, res) => {
   }
 });
 
-// GET /api/process/top - Top-like realtime data
-router.get('/top', (req, res) => {
+// POST /api/process/start - Start a new process
+router.post('/start', (req, res) => {
+  try {
+    const { command } = req.body;
+
+    if (!command) {
+      return res.status(400).json({ error: 'Command required' });
+    }
+
+    logger.info(`Starting process: ${command}`);
+
+    const parts = command.split(' ');
+    const proc = spawn(parts[0], parts.slice(1), { detached: true, stdio: 'ignore' });
+    proc.unref();
+
+    res.json({ message: `Process started: ${command}`, pid: proc.pid });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
   try {
     const top = spawn('top', ['-b', '-n', '1']);
     let output = '';
