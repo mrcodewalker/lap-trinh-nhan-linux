@@ -51,12 +51,15 @@ function initSocketHandlers(io) {
         await fs.writeFile(sourceFile, code, 'utf-8');
         kEmit('log', { line: `[write] ${sourceFile}`, level: 'info' });
 
-        const makefile = `obj-m += ${moduleName}.o\n\nall:\n\tmake -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules\n\nclean:\n\tmake -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean\n\n.PHONY: all clean\n`;
+        // Use CURDIR (set by make itself to the directory it was invoked from)
+        // so M= always points to moduleDir regardless of Node's cwd.
+        const makefile = `obj-m += ${moduleName}.o\n\nall:\n\tmake -C /lib/modules/$(shell uname -r)/build M=$(CURDIR) modules\n\nclean:\n\tmake -C /lib/modules/$(shell uname -r)/build M=$(CURDIR) clean\n\n.PHONY: all clean\n`;
         await fs.writeFile(makeFile, makefile, 'utf-8');
         kEmit('log', { line: '[write] Makefile', level: 'info' });
         kEmit('log', { line: `[make] Building ${moduleName}.ko ...`, level: 'info' });
 
-        const make = spawn('make', ['-C', moduleDir]);
+        // Run make with cwd=moduleDir so CURDIR resolves correctly
+        const make = spawn('make', [], { cwd: moduleDir });
         let buildOutput = '';
         let buildError  = '';
 

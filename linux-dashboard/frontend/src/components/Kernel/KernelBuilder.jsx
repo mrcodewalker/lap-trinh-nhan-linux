@@ -323,7 +323,7 @@ export default function KernelBuilder() {
       </div>
 
       {/* ── RIGHT: Build output + dmesg ──────────────────────── */}
-      <div className="flex flex-col gap-3 min-h-0">
+      <div className="flex flex-col gap-3 min-h-0 overflow-y-auto pr-1">
 
         {/* Build log panel */}
         <div className="card flex flex-col" style={{ minHeight: 280, maxHeight: 380 }}>

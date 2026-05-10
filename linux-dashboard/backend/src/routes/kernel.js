@@ -253,14 +253,14 @@ router.post('/build', async (req, res) => {
     // Write source file
     await fs.writeFile(sourceFile, code, 'utf-8');
 
-    // Write Makefile
+    // Write Makefile — use CURDIR (set by make to its invocation dir) so M= is always correct
     const makefile = `obj-m += ${moduleName}.o
 
 all:
-\tmake -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+\tmake -C /lib/modules/$(shell uname -r)/build M=$(CURDIR) modules
 
 clean:
-\tmake -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+\tmake -C /lib/modules/$(shell uname -r)/build M=$(CURDIR) clean
 
 .PHONY: all clean
 `;
@@ -268,8 +268,8 @@ clean:
 
     logger.info(`Building kernel module: ${moduleName}`);
 
-    // Build module
-    const make = spawn('make', ['-C', moduleDir]);
+    // Build module — run make with cwd=moduleDir so CURDIR resolves correctly
+    const make = spawn('make', [], { cwd: moduleDir });
     let output = '';
     let error = '';
 
@@ -336,14 +336,14 @@ router.post('/compile', async (req, res) => {
     // Write source file
     await fs.writeFile(sourceFile, code, 'utf-8');
 
-    // Write Makefile
+    // Write Makefile — use CURDIR (set by make to its invocation dir) so M= is always correct
     const makefile = `obj-m += ${moduleName}.o
 
 all:
-\tmake -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+\tmake -C /lib/modules/$(shell uname -r)/build M=$(CURDIR) modules
 
 clean:
-\tmake -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+\tmake -C /lib/modules/$(shell uname -r)/build M=$(CURDIR) clean
 
 .PHONY: all clean
 `;
@@ -351,8 +351,8 @@ clean:
 
     logger.info(`Compiling kernel module: ${moduleName}`);
 
-    // Build module
-    const make = spawn('make', ['-C', moduleDir]);
+    // Build module — run make with cwd=moduleDir so CURDIR resolves correctly
+    const make = spawn('make', [], { cwd: moduleDir });
     let buildOutput = '';
     let buildError = '';
 
