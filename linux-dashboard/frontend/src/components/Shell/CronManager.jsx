@@ -27,6 +27,9 @@ export default function CronManager() {
   })
   const [saving, setSaving]     = useState(false)
 
+  const [runningJob, setRunningJob] = useState(null)
+  const [runResult, setRunResult]   = useState(null)
+
   useEffect(() => { loadJobs() }, [])
 
   const loadJobs = async () => {
@@ -39,6 +42,19 @@ export default function CronManager() {
     } finally { setLoading(false) }
   }
 
+  const runNow = async (command) => {
+    setRunningJob(command)
+    setRunResult(null)
+    try {
+      const r = await api.post('/shell/cron/run', { command })
+      setRunResult(r.data)
+    } catch (e) {
+      setRunResult({ success: false, error: e.response?.data?.error || e.message })
+    } finally {
+      setRunningJob(null)
+    }
+  }
+
   const applyPreset = (preset) => {
     const [m, h, dom, mo, dow] = preset.split(' ')
     setForm(f => ({ ...f, minute: m, hour: h, dayOfMonth: dom, month: mo, dayOfWeek: dow }))
@@ -49,16 +65,19 @@ export default function CronManager() {
     
     let finalCommand = form.command
     
-    if (form.mode === 'script') {
-      if (!form.scriptContent.trim()) { setError('Script content is required'); return }
+    if (form.mode === 'script' || form.mode === 'python') {
+      const content = form.mode === 'python' ? form.pythonContent : form.scriptContent;
+      if (!content.trim()) { setError('Content is required'); return }
       setSaving(true)
       try {
-        const scriptName = `cron_${Date.now()}.sh`
+        const ext = form.mode === 'python' ? 'py' : 'sh'
+        const interpreter = form.mode === 'python' ? 'python3' : 'bash'
+        const scriptName = `cron_${Date.now()}.${ext}`
         const r = await api.post('/shell/scripts/save', { 
           name: scriptName, 
-          content: form.scriptContent 
+          content: content 
         })
-        finalCommand = `bash ${r.data.path}`
+        finalCommand = `${interpreter} ${r.data.path}`
       } catch (e) {
         setError('Failed to save script: ' + (e.response?.data?.error || e.message))
         setSaving(false)
@@ -74,7 +93,7 @@ export default function CronManager() {
       await api.post('/shell/cron/add', { ...form, command: finalCommand })
       setForm({ 
         minute:'*', hour:'*', dayOfMonth:'*', month:'*', dayOfWeek:'*', 
-        command:'', mode: 'cmd', scriptContent: '' 
+        command:'', mode: 'cmd', scriptContent: '', pythonContent: '' 
       })
       setShowForm(false)
       loadJobs()
@@ -96,120 +115,164 @@ export default function CronManager() {
   const cronPreview = `${form.minute} ${form.hour} ${form.dayOfMonth} ${form.month} ${form.dayOfWeek} ${form.command}`
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      {/* Run result modal/banner */}
+      <AnimatePresence>
+        {runResult && (
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="card w-full max-w-2xl overflow-hidden flex flex-col max-h-[80vh]">
+              <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <Terminal size={16} className="text-cyan-400" />
+                  Task Execution Result
+                </h3>
+                <button onClick={() => setRunResult(null)} className="p-1 hover:bg-white/10 rounded">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="p-4 overflow-auto mono text-xs bg-[#050608] flex-1">
+                {runResult.success ? (
+                  <pre className="text-emerald-400">{runResult.output}</pre>
+                ) : (
+                  <pre className="text-rose-400">{runResult.error || runResult.output}</pre>
+                )}
+              </div>
+              <div className="p-3 border-t border-white/10 bg-white/5 flex justify-end">
+                <button onClick={() => setRunResult(null)} className="btn-primary py-1.5 px-4 text-xs">Close</button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Toolbar */}
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium" style={{ color: 'var(--text2)' }}>
-          {jobs.length} scheduled jobs
-        </p>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+            <CalendarClock size={20} className="text-cyan-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-white">Cron Jobs</h2>
+            <p className="text-xs text-white/40">{jobs.length} active schedules</p>
+          </div>
+        </div>
         <div className="flex items-center gap-2">
-          <button onClick={loadJobs} className="btn-ghost p-2">
-            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+          <button onClick={loadJobs} className="btn-ghost p-2 rounded-lg bg-white/5">
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
-          <button onClick={() => setShowForm(v => !v)} className="btn-primary flex items-center gap-1.5 text-sm">
-            <Plus size={14} /> New Job
+          <button onClick={() => setShowForm(v => !v)} className="btn-primary flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-cyan-500/20">
+            <Plus size={16} /> New Task
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="banner-error">
+        <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
+          className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-3">
+          <AlertCircle size={14} />
           {error}
-          <button onClick={() => setError(null)} className="ml-auto"><X size={12} /></button>
-        </div>
+          <button onClick={() => setError(null)} className="ml-auto opacity-60 hover:opacity-100"><X size={14} /></button>
+        </motion.div>
       )}
 
       {/* Add form */}
       <AnimatePresence>
         {showForm && (
           <motion.form onSubmit={addJob}
-            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-            className="card p-5 space-y-4">
+            initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+            className="card p-6 space-y-5 overflow-hidden border-cyan-500/30 bg-cyan-500/[0.02]">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>New Scheduled Task</p>
-              <button type="button" onClick={() => setShowForm(false)}>
-                <X size={15} style={{ color: 'var(--text3)' }} />
+              <p className="text-sm font-bold text-white uppercase tracking-wider">Configure Schedule</p>
+              <button type="button" onClick={() => setShowForm(false)} className="text-white/30 hover:text-white">
+                <X size={20} />
               </button>
             </div>
 
-            {/* Presets */}
-            <div>
-              <p className="text-xs mb-2" style={{ color: 'var(--text3)' }}>Quick presets</p>
-              <div className="flex flex-wrap gap-2">
-                {PRESETS.map(p => (
-                  <button key={p.value} type="button" onClick={() => applyPreset(p.value)}
-                    className="btn-ghost py-1 px-3 text-xs">{p.label}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Schedule fields */}
-            <div className="grid grid-cols-5 gap-2">
-              {FIELDS.map((field, i) => (
-                <div key={field}>
-                  <label className="text-[11px] block mb-1" style={{ color: 'var(--text3)' }}>
-                    {FIELD_LABELS[i]}
-                  </label>
-                  <input value={form[field]} onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
-                    className="input text-center mono text-sm py-2" placeholder={FIELD_HINTS[i]} />
-                </div>
-              ))}
-            </div>
-
-            {/* Command / Script Selector */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs block" style={{ color: 'var(--text3)' }}>Task Execution</label>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setForm(f => ({ ...f, mode: 'cmd' }))}
-                    className={clsx("text-[10px] font-bold px-2 py-0.5 rounded transition-all", form.mode === 'cmd' ? "bg-cyan-500 text-black" : "bg-white/5 text-white/30")}>
-                    SINGLE COMMAND
-                  </button>
-                  <button type="button" onClick={() => setForm(f => ({ ...f, mode: 'script' }))}
-                    className={clsx("text-[10px] font-bold px-2 py-0.5 rounded transition-all", form.mode === 'script' ? "bg-cyan-500 text-black" : "bg-white/5 text-white/30")}>
-                    SHELL SCRIPT
-                  </button>
-                </div>
-              </div>
-
-              {form.mode === 'script' ? (
-                <div className="space-y-2">
-                  <div className="terminal-wrap" style={{ height: '200px' }}>
-                    <div className="terminal-header">
-                      <div className="flex gap-1">
-                        <span className="w-2 h-2 rounded-full bg-red-500/40" />
-                        <span className="w-2 h-2 rounded-full bg-yellow-500/40" />
-                        <span className="w-2 h-2 rounded-full bg-green-500/40" />
-                      </div>
-                      <span className="text-[10px] ml-2 text-white/20 mono">script_editor.sh</span>
-                    </div>
-                    <textarea 
-                      value={form.scriptContent || '#!/bin/bash\n\necho "Current time: $(date)"\n# Add your multi-line shell script here'} 
-                      onChange={e => setForm(f => ({ ...f, scriptContent: e.target.value }))}
-                      className="w-full h-[160px] bg-[#0a0b10] p-4 text-xs mono text-cyan-400 outline-none resize-none leading-relaxed"
-                    />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Left: Schedule */}
+              <div className="space-y-4">
+                <div>
+                  <p className="text-[10px] font-bold text-white/30 uppercase mb-2 tracking-widest">Presets</p>
+                  <div className="flex flex-wrap gap-2">
+                    {PRESETS.map(p => (
+                      <button key={p.value} type="button" onClick={() => applyPreset(p.value)}
+                        className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[10px] font-bold hover:bg-cyan-500/10 hover:border-cyan-500/30 transition-all">
+                        {p.label}
+                      </button>
+                    ))}
                   </div>
-                  <p className="text-[10px] text-white/20 italic">Note: The script will be saved and scheduled automatically.</p>
                 </div>
-              ) : (
-                <input value={form.command} onChange={e => setForm(f => ({ ...f, command: e.target.value }))}
-                  className="input mono" placeholder="e.g. /usr/bin/python3 /path/to/app.py" />
-              )}
+
+                <div className="grid grid-cols-5 gap-2">
+                  {FIELDS.map((field, i) => (
+                    <div key={field}>
+                      <label className="text-[10px] font-bold text-white/30 block mb-1 uppercase text-center">
+                        {FIELD_LABELS[i]}
+                      </label>
+                      <input value={form[field]} onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
+                        className="w-full bg-black/40 border border-white/10 rounded-lg py-2 text-center mono text-sm focus:border-cyan-500/50 outline-none" 
+                        placeholder={FIELD_HINTS[i]} />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
+                  <p className="text-[10px] font-bold text-white/20 uppercase">Schedule Preview</p>
+                  <p className="mono text-sm text-cyan-400">{form.minute} {form.hour} {form.dayOfMonth} {form.month} {form.dayOfWeek}</p>
+                </div>
+              </div>
+
+              {/* Right: Task */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Execution Mode</p>
+                  <div className="flex bg-black/40 p-1 rounded-xl border border-white/5">
+                    {['cmd', 'script', 'python'].map(m => (
+                      <button key={m} type="button" onClick={() => setForm(f => ({ ...f, mode: m }))}
+                        className={clsx(
+                          "px-3 py-1 rounded-lg text-[10px] font-bold transition-all uppercase",
+                          form.mode === m ? "bg-cyan-500 text-black shadow-lg" : "text-white/40 hover:text-white"
+                        )}>
+                        {m === 'cmd' ? 'Shell' : m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {form.mode === 'cmd' ? (
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-white/30 uppercase">Command Line</label>
+                    <input value={form.command} onChange={e => setForm(f => ({ ...f, command: e.target.value }))}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 mono text-sm text-cyan-400 focus:border-cyan-500/50 outline-none" 
+                      placeholder="e.g. curl https://api.health.com/check" />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-bold text-white/30 uppercase">{form.mode} Script</label>
+                      <span className="text-[10px] mono text-white/20">{form.mode === 'python' ? 'app.py' : 'worker.sh'}</span>
+                    </div>
+                    <div className="rounded-xl overflow-hidden border border-white/10">
+                      <textarea 
+                        value={form.mode === 'python' ? form.pythonContent : form.scriptContent} 
+                        onChange={e => setForm(f => ({ ...f, [form.mode === 'python' ? 'pythonContent' : 'scriptContent']: e.target.value }))}
+                        className="w-full h-40 bg-[#0a0b10] p-4 text-xs mono text-cyan-400 outline-none resize-none leading-relaxed"
+                        placeholder={form.mode === 'python' ? 'import os\nprint("Hello from Python")' : '#!/bin/bash\necho "Hello from Shell"'}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Preview */}
-            <div className="code-block text-xs">
-              <span style={{ color: 'var(--text3)' }}>Preview: </span>
-              <span style={{ color: 'var(--accent)' }}>
-                {form.minute} {form.hour} {form.dayOfMonth} {form.month} {form.dayOfWeek} {form.mode === 'script' ? 'bash [generated_script].sh' : (form.command || '[command]')}
-              </span>
-            </div>
-
-            <div className="flex gap-2 justify-end">
-              <button type="button" onClick={() => setShowForm(false)} className="btn-ghost">Cancel</button>
+            <div className="flex gap-3 justify-end pt-2">
+              <button type="button" onClick={() => setShowForm(false)} className="px-6 py-2 rounded-xl text-sm font-bold text-white/40 hover:text-white transition-colors">
+                Cancel
+              </button>
               <button type="submit" disabled={saving}
-                className="btn-primary flex items-center gap-1.5 disabled:opacity-40">
-                {saving ? <RefreshCw size={13} className="animate-spin" /> : <Check size={13} />}
+                className="btn-primary flex items-center gap-2 px-8 py-2 rounded-xl text-sm font-bold shadow-lg shadow-cyan-500/20 disabled:opacity-50">
+                {saving ? <RefreshCw size={16} className="animate-spin" /> : <Check size={16} />}
                 Schedule Task
               </button>
             </div>
@@ -218,38 +281,55 @@ export default function CronManager() {
       </AnimatePresence>
 
       {/* Jobs list */}
-      <div className="card overflow-hidden">
+      <div className="space-y-3">
         {loading ? (
-          <div className="py-12 text-center text-xs" style={{ color: 'var(--text3)' }}>Loading...</div>
+          <div className="py-20 text-center space-y-4">
+            <RefreshCw size={40} className="mx-auto animate-spin text-cyan-500/20" />
+            <p className="text-sm text-white/20 font-mono tracking-widest uppercase">Fetching crontab...</p>
+          </div>
         ) : jobs.length === 0 ? (
-          <div className="py-12 text-center">
-            <CalendarClock size={32} className="mx-auto mb-3" style={{ color: 'var(--border)' }} />
-            <p className="text-xs mb-4" style={{ color: 'var(--text3)' }}>No cron jobs scheduled</p>
-            <button onClick={() => setShowForm(true)} className="btn-primary text-xs">
-              <Plus size={12} className="inline mr-1" /> Add your first job
+          <div className="card p-20 text-center bg-white/[0.01]">
+            <CalendarClock size={48} className="mx-auto mb-4 text-white/5" />
+            <p className="text-sm text-white/40 mb-6">No scheduled tasks found in crontab</p>
+            <button onClick={() => setShowForm(true)} className="btn-primary px-6 py-2 rounded-xl text-sm font-bold">
+              Create First Task
             </button>
           </div>
         ) : (
-          <div style={{ borderTop: '1px solid var(--border2)' }}>
+          <div className="grid grid-cols-1 gap-3">
             {jobs.map((job, i) => (
               <motion.div key={i}
-                initial={{ opacity: 0, x: -6 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.04 }}
-                className="flex items-center gap-4 px-4 py-3 group"
-                style={{ borderBottom: '1px solid var(--border2)' }}>
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.15)' }}>
-                  <Clock size={14} style={{ color: 'var(--accent)' }} />
+                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+                className="card p-4 group hover:border-cyan-500/30 transition-all bg-white/[0.02]">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-cyan-500/5 border border-cyan-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-cyan-500/10 transition-colors">
+                    <Clock size={20} className="text-cyan-400/60 group-hover:text-cyan-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 text-[10px] font-bold mono">
+                        {job.schedule}
+                      </span>
+                      {job.command.includes('.py') && <span className="text-[9px] text-yellow-500/60 font-bold uppercase tracking-wider">Python</span>}
+                      {job.command.includes('.sh') && <span className="text-[9px] text-blue-500/60 font-bold uppercase tracking-wider">Shell</span>}
+                    </div>
+                    <p className="text-sm mono text-white truncate" title={job.command}>{job.command}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => runNow(job.command)}
+                      disabled={runningJob === job.command}
+                      className="p-2.5 rounded-xl bg-emerald-500/5 text-emerald-500 border border-emerald-500/10 hover:bg-emerald-500/20 transition-all"
+                      title="Run Now">
+                      {runningJob === job.command ? <RefreshCw size={16} className="animate-spin" /> : <Play size={16} />}
+                    </button>
+                    <button onClick={() => removeJob(job.id)}
+                      className="p-2.5 rounded-xl bg-rose-500/5 text-rose-500 border border-rose-500/10 hover:bg-rose-500/20 transition-all"
+                      title="Remove">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm mono truncate" style={{ color: 'var(--text)' }}>{job.command}</p>
-                  <p className="text-xs mt-0.5 mono" style={{ color: 'var(--text3)' }}>{job.schedule}</p>
-                </div>
-                <button onClick={() => removeJob(job.id)}
-                  className="btn-danger py-1 px-2.5 text-xs flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Trash2 size={11} /> Remove
-                </button>
               </motion.div>
             ))}
           </div>

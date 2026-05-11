@@ -509,4 +509,35 @@ router.get('/sample/:name', async (req, res) => {
   }
 });
 
+// GET /api/kernel/devices - Get character and block devices (Major IDs)
+router.get('/devices', (req, res) => {
+  try {
+    const cat = spawn('cat', ['/proc/devices']);
+    let output = '';
+
+    cat.stdout.on('data', (data) => output += data.toString());
+
+    cat.on('close', () => {
+      const sections = output.split('\n\n');
+      
+      const parseSection = (text) => {
+        if (!text) return [];
+        return text.split('\n')
+          .filter(l => l.trim() && !l.includes('Devices:'))
+          .map(l => {
+            const parts = l.trim().split(/\s+/);
+            return { major: parts[0], name: parts[1] };
+          });
+      };
+
+      const charDevices = parseSection(sections.find(s => s.includes('Character devices:')));
+      const blockDevices = parseSection(sections.find(s => s.includes('Block devices:')));
+
+      res.json({ charDevices, blockDevices });
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

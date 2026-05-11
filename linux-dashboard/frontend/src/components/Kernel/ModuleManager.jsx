@@ -18,11 +18,16 @@ export default function ModuleManager() {
   const [busy, setBusy]             = useState(null)
   const [opResult, setOpResult]     = useState(null)
   const [kernelVer, setKernelVer]   = useState('')
+  const [devices, setDevices]       = useState({ charDevices: [], blockDevices: [] })
 
   useEffect(() => {
     loadModules()
     loadKernelVer()
-    const t = setInterval(loadModules, 4000)
+    loadDevices()
+    const t = setInterval(() => {
+      loadModules()
+      loadDevices()
+    }, 4000)
     return () => clearInterval(t)
   }, [])
 
@@ -42,6 +47,13 @@ export default function ModuleManager() {
     try {
       const r = await api.get('/kernel/version')
       setKernelVer(r.data.version)
+    } catch { /* silent */ }
+  }
+
+  const loadDevices = async () => {
+    try {
+      const r = await api.get('/kernel/devices')
+      setDevices(r.data)
     } catch { /* silent */ }
   }
 
@@ -92,47 +104,54 @@ export default function ModuleManager() {
   )
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="card p-3">
-          <p className="text-xs text-white/30 mb-1">Loaded Modules</p>
-          <p className="text-2xl font-bold text-cyan-400">{modules.length}</p>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="card p-4 border-l-4 border-cyan-500">
+          <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1">Loaded Modules</p>
+          <p className="text-3xl font-black text-white">{modules.length}</p>
         </div>
-        <div className="card p-3">
-          <p className="text-xs text-white/30 mb-1">Kernel Version</p>
-          <p className="text-sm font-mono text-violet-400 truncate">{kernelVer || '...'}</p>
+        <div className="card p-4 border-l-4 border-violet-500">
+          <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1">Kernel Version</p>
+          <p className="text-sm font-mono text-violet-400 truncate mt-2">{kernelVer || '...'}</p>
         </div>
-        <div className="card p-3">
-          <p className="text-xs text-white/30 mb-1">In Use</p>
-          <p className="text-2xl font-bold text-emerald-400">
+        <div className="card p-4 border-l-4 border-emerald-500">
+          <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1">Active Modules</p>
+          <p className="text-3xl font-black text-white">
             {modules.filter(m => m.usedBy !== 'unused' && m.usedBy !== '0').length}
           </p>
         </div>
+        <div className="card p-4 border-l-4 border-amber-500">
+          <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-1">Device Nodes</p>
+          <p className="text-3xl font-black text-white">{devices.charDevices.length + devices.blockDevices.length}</p>
+        </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="card p-3 flex items-center gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-[160px]">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search modules..."
-            className="input pl-9 py-2"
-          />
-        </div>
-        <button
-          onClick={() => { setModal({ type: 'load' }); setOpResult(null) }}
-          className="btn-primary flex items-center gap-1.5 text-sm"
-        >
-          <Upload size={13} /> Load Module
-        </button>
-        <button onClick={loadModules} className="btn-ghost p-2">
-          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-        </button>
-        <span className="text-xs text-white/30">{filtered.length} modules</span>
-      </div>
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 min-h-0">
+        
+        {/* Main List */}
+        <div className="xl:col-span-2 space-y-3">
+          {/* Toolbar */}
+          <div className="card p-3 flex items-center gap-3">
+            <div className="relative flex-1">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search module name..."
+                className="w-full bg-black/20 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm outline-none focus:border-cyan-500/50 transition-all"
+              />
+            </div>
+            <button
+              onClick={() => { setModal({ type: 'load' }); setOpResult(null) }}
+              className="btn-primary flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold"
+            >
+              <Upload size={14} /> Load Module
+            </button>
+            <button onClick={loadModules} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
 
       {/* Op result banner */}
       <AnimatePresence>
@@ -172,80 +191,92 @@ export default function ModuleManager() {
         </div>
       )}
 
-      {/* Table */}
-      <div className="card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Module Name</th>
-                <th>Size</th>
-                <th>Used By</th>
-                <th>Dependencies</th>
-                <th className="text-right w-20">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.slice(0, 40).map((mod, i) => (
-                <motion.tr
-                  key={mod.name}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: Math.min(i * 0.008, 0.3) }}
-                  className="group cursor-pointer"
-                  onClick={() => { setModal({ type: 'info', data: mod }); getInfo(mod.name) }}
-                >
-                  <td>
-                    <div className="flex items-center gap-2">
-                      <Package size={13} className="text-cyan-400/50 flex-shrink-0" />
-                      <span className="font-mono text-cyan-400/90 font-medium">{mod.name}</span>
-                    </div>
-                  </td>
-                  <td className="text-white/45 text-xs font-mono">{mod.size}</td>
-                  <td>
-                    <span className={`badge text-[10px] ${
-                      mod.usedBy === 'unused' || mod.usedBy === '0'
-                        ? 'badge-purple'
-                        : 'badge-green'
-                    }`}>
-                      {mod.usedBy === '0' ? 'unused' : mod.usedBy}
-                    </span>
-                  </td>
-                  <td className="text-white/30 text-xs truncate max-w-[160px]">
-                    {mod.dependencies || '—'}
-                  </td>
-                  <td className="text-right" onClick={e => e.stopPropagation()}>
-                    <div className="flex items-center gap-0.5 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => { setModal({ type: 'info', data: mod }); getInfo(mod.name) }}
-                        className="p-1.5 rounded-lg hover:bg-cyan-500/15 text-cyan-400/50 hover:text-cyan-400 transition-colors"
-                      >
-                        <Info size={12} />
-                      </button>
-                      <button
-                        onClick={() => { setModal({ type: 'unload', data: mod }); setOpResult(null) }}
-                        disabled={busy === mod.name}
-                        className="p-1.5 rounded-lg hover:bg-red-500/15 text-red-400/50 hover:text-red-400 transition-colors disabled:opacity-40"
-                      >
-                        {busy === mod.name
-                          ? <RefreshCw size={12} className="animate-spin" />
-                          : <Trash2 size={12} />
-                        }
-                      </button>
-                    </div>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="card overflow-hidden border-white/5">
+            <div className="overflow-x-auto max-h-[600px]">
+              <table className="w-full text-left border-collapse">
+                <thead className="sticky top-0 bg-[#0d0e12] z-10">
+                  <tr className="border-b border-white/10">
+                    <th className="px-4 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">Module</th>
+                    <th className="px-4 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">Size</th>
+                    <th className="px-4 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">Status</th>
+                    <th className="px-4 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.03]">
+                  {filtered.slice(0, 50).map((mod, i) => (
+                    <tr key={mod.name} 
+                      className="group hover:bg-white/[0.02] transition-colors cursor-pointer"
+                      onClick={() => { setModal({ type: 'info', data: mod }); getInfo(mod.name) }}>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-cyan-500/40" />
+                          <span className="font-mono text-sm text-cyan-400 font-bold">{mod.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-white/40 font-mono">{(parseInt(mod.size)/1024).toFixed(1)} KB</td>
+                      <td className="px-4 py-3">
+                        <span className={clsx(
+                          "px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter",
+                          mod.usedBy === '0' || mod.usedBy === 'unused' ? "bg-white/5 text-white/30" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                        )}>
+                          {mod.usedBy === '0' ? 'unused' : `${mod.usedBy} users`}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => { setModal({ type: 'unload', data: mod }); setOpResult(null) }}
+                          className="p-2 rounded-lg bg-rose-500/5 text-rose-500 opacity-0 group-hover:opacity-100 transition-all hover:bg-rose-500/20">
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {filtered.length === 0 && !loading && (
+              <div className="py-20 text-center">
+                <Cpu size={32} className="mx-auto text-white/10 mb-3" />
+                <p className="text-xs text-white/30">No kernel modules found</p>
+              </div>
+            )}
+          </div>
         </div>
 
-        {filtered.length === 0 && !loading && (
-          <div className="py-12 text-center">
-            <Cpu size={32} className="mx-auto text-white/10 mb-3" />
-            <p className="text-xs text-white/30">No modules found</p>
+        {/* Major ID Mapping (Right Panel) */}
+        <div className="space-y-4">
+          <div className="card p-5 bg-gradient-to-br from-white/[0.03] to-transparent">
+            <h3 className="text-xs font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
+              <Zap size={14} className="text-amber-400" />
+              Major ID Mapping
+            </h3>
+            
+            <div className="space-y-4 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar">
+              <div>
+                <p className="text-[10px] font-bold text-white/20 uppercase mb-2 tracking-widest">Character Devices</p>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {devices.charDevices.map(dev => (
+                    <div key={`${dev.major}-${dev.name}`} className="flex items-center justify-between p-2 rounded-lg bg-black/40 border border-white/5 group hover:border-amber-500/30 transition-all">
+                      <span className="text-xs font-mono text-amber-400/80 group-hover:text-amber-400 font-bold">{dev.major}</span>
+                      <span className="text-xs text-white/60 font-mono">{dev.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-bold text-white/20 uppercase mb-2 tracking-widest">Block Devices</p>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {devices.blockDevices.map(dev => (
+                    <div key={`${dev.major}-${dev.name}`} className="flex items-center justify-between p-2 rounded-lg bg-black/40 border border-white/5 group hover:border-cyan-500/30 transition-all">
+                      <span className="text-xs font-mono text-cyan-400/80 group-hover:text-cyan-400 font-bold">{dev.major}</span>
+                      <span className="text-xs text-white/60 font-mono">{dev.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* ── Modals ── */}
