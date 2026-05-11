@@ -214,6 +214,43 @@ function initSocketHandlers(io) {
       }
     });
 
+    // ── PACKAGE MANAGEMENT (streaming) ────────────────────────
+    socket.on('packages:install', (data) => {
+      const { name, id } = data;
+      logger.info(`Socket Install: ${name}`);
+      try {
+        const apt = spawn('sudo', ['-n', 'apt-get', 'install', '-y', name]);
+        apt.stdout.on('data', (d) => socket.emit('packages:output', { id, data: d.toString() }));
+        apt.stderr.on('data', (d) => socket.emit('packages:output', { id, data: d.toString() }));
+        apt.on('close', (code) => socket.emit('packages:close', { id, code }));
+        apt.on('error', (err) => {
+          socket.emit('packages:output', { id, data: `Error: ${err.message}\n` });
+          socket.emit('packages:close', { id, code: 1 });
+        });
+      } catch (err) {
+        socket.emit('packages:output', { id, data: `Fatal: ${err.message}\n` });
+        socket.emit('packages:close', { id, code: 1 });
+      }
+    });
+
+    socket.on('packages:remove', (data) => {
+      const { name, id } = data;
+      logger.info(`Socket Remove: ${name}`);
+      try {
+        const apt = spawn('sudo', ['-n', 'apt-get', 'remove', '-y', name]);
+        apt.stdout.on('data', (d) => socket.emit('packages:output', { id, data: d.toString() }));
+        apt.stderr.on('data', (d) => socket.emit('packages:output', { id, data: d.toString() }));
+        apt.on('close', (code) => socket.emit('packages:close', { id, code }));
+        apt.on('error', (err) => {
+          socket.emit('packages:output', { id, data: `Error: ${err.message}\n` });
+          socket.emit('packages:close', { id, code: 1 });
+        });
+      } catch (err) {
+        socket.emit('packages:output', { id, data: `Fatal: ${err.message}\n` });
+        socket.emit('packages:close', { id, code: 1 });
+      }
+    });
+
     // ── DISCONNECT ────────────────────────────────────────────
     socket.on('disconnect', () => {
       activeSessions.delete(socket.id);
