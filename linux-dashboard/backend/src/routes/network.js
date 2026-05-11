@@ -56,10 +56,11 @@ router.get('/stats', authenticateToken, (req, res) => {
   }
 });
 
-// GET /api/network/connections - Get active connections
+// GET /api/network/connections - Get active connections with process info
 router.get('/connections', authenticateToken, (req, res) => {
   try {
-    const ss = spawn('ss', ['-tuln']);
+    // -t (TCP), -u (UDP), -l (Listening), -p (Process info), -n (Numeric ports)
+    const ss = spawn('ss', ['-tulpn']);
     let output = '';
 
     ss.stdout.on('data', (data) => {
@@ -73,13 +74,27 @@ router.get('/connections', authenticateToken, (req, res) => {
         .filter(line => line.trim())
         .map(line => {
           const parts = line.split(/\s+/);
+          // Parse process info: users:(("ssh",pid=123,fd=3))
+          let processName = '';
+          let pid = '';
+          const lastPart = parts[parts.length - 1];
+          if (lastPart && lastPart.includes('users:')) {
+            const match = lastPart.match(/users:\(\("([^"]+)",pid=(\d+)/);
+            if (match) {
+              processName = match[1];
+              pid = match[2];
+            }
+          }
+
           return {
             proto: parts[0],
-            recvQ: parts[1],
-            sendQ: parts[2],
-            localAddr: parts[3],
-            peerAddr: parts[4],
-            state: parts[5]
+            state: parts[1],
+            recvQ: parts[2],
+            sendQ: parts[3],
+            localAddr: parts[4],
+            peerAddr: parts[5],
+            processName,
+            pid
           };
         });
 
@@ -89,7 +104,7 @@ router.get('/connections', authenticateToken, (req, res) => {
     ss.on('error', (err) => {
       if (res.headersSent) return;
       logger.error(`Failed to start ss: ${err.message}`);
-      res.status(500).json({ error: 'ss command not found or failed' });
+      res.status(500).json({ error: 'ss command failed' });
     });
   } catch (err) {
     if (!res.headersSent) res.status(500).json({ error: err.message });
