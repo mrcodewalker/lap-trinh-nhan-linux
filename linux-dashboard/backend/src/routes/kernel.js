@@ -51,6 +51,11 @@ router.get('/modules', (req, res) => {
 
       res.json({ modules, count: modules.length });
     });
+
+    lsmod.on('error', (err) => {
+      logger.error(`Failed to start lsmod: ${err.message}`);
+      res.status(500).json({ error: 'lsmod command not found or failed' });
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -114,6 +119,11 @@ router.post('/insmod', (req, res) => {
         res.status(500).json({ error: error || 'Failed to load module' });
       }
     });
+
+    insmod.on('error', (err) => {
+      logger.error(`Failed to start insmod: ${err.message}`);
+      res.status(500).json({ error: 'insmod command not found' });
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -143,6 +153,11 @@ router.post('/rmmod', (req, res) => {
       } else {
         res.status(500).json({ error: error || 'Failed to unload module' });
       }
+    });
+
+    rmmod.on('error', (err) => {
+      logger.error(`Failed to start rmmod: ${err.message}`);
+      res.status(500).json({ error: 'rmmod command not found' });
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -190,6 +205,11 @@ router.get('/dmesg', (req, res) => {
       const allLines = output.split('\n');
       const lastLines = allLines.slice(-parseInt(lines));
       res.json({ messages: lastLines.join('\n') });
+    });
+
+    dmesg.on('error', (err) => {
+      logger.error(`Failed to start dmesg: ${err.message}`);
+      res.status(500).json({ error: 'dmesg command not found or failed' });
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -307,6 +327,11 @@ clean:
           error
         });
       }
+    });
+
+    make.on('error', (err) => {
+      logger.error(`Failed to start make: ${err.message}`);
+      res.status(500).json({ error: 'make command not found' });
     });
 
     setTimeout(() => {

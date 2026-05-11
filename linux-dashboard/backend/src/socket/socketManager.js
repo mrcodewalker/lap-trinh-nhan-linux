@@ -26,6 +26,10 @@ function initSocketHandlers(io) {
         proc.stdout.on('data', (d) => socket.emit('terminal:output', { id, data: d.toString() }));
         proc.stderr.on('data', (d) => socket.emit('terminal:error',  { id, error: d.toString() }));
         proc.on('close', (code) => socket.emit('terminal:close', { id, code }));
+        proc.on('error', (err) => {
+          logger.error(`Terminal spawn error: ${err.message}`);
+          socket.emit('terminal:error', { id, error: `Failed to start terminal: ${err.message}` });
+        });
         setTimeout(() => {
           if (proc.exitCode === null) { proc.kill(); socket.emit('terminal:timeout', { id }); }
         }, 30000);
@@ -101,6 +105,15 @@ function initSocketHandlers(io) {
               kEmit('done', { success: true, koFile, loaded: false, loadError: insmodErr });
             }
           });
+          insmod.on('error', (err) => {
+            kEmit('log', { line: `[error] Failed to start insmod: ${err.message}`, level: 'error' });
+            kEmit('done', { success: false, error: `insmod failed: ${err.message}` });
+          });
+        });
+
+        make.on('error', (err) => {
+          kEmit('log', { line: `[error] Failed to start make: ${err.message}`, level: 'error' });
+          kEmit('done', { success: false, error: `make failed: ${err.message}` });
         });
 
         setTimeout(() => {
@@ -115,14 +128,47 @@ function initSocketHandlers(io) {
     });
 
     // ── DMESG LIVE WATCH ──────────────────────────────────────
-    socket.on('kernel:dmesg:watch', () => {
+    socket.on('kernel:dmesg:watch', async () => {
       logger.info('dmesg watch started');
-      const dmesg = spawn('dmesg', ['-w', '--color=never']);
+      
+      // Try dmesg without sudo first (some systems allow it or have it configured)
+      // then try with sudo -n (non-interactive) to avoid hanging on password prompt
+      let dmesg;
+      try {
+        // Test if dmesg works without sudo
+        const test = spawn('dmesg', ['-n', '1']); // just a quick test
+        const works = await new Promise(res => test.on('close', code => res(code === 0)));
+        
+        if (works) {
+          dmesg = spawn('dmesg', ['-w', '--color=never']);
+        } else {
+          // Try with sudo -n (non-interactive)
+          dmesg = spawn('sudo', ['-n', 'dmesg', '-w', '--color=never']);
+        }
+      } catch (e) {
+        socket.emit('kernel:dmesg:line', { line: `[error] Failed to start dmesg: ${e.message}` });
+        return;
+      }
+
       dmesg.stdout.on('data', (d) => {
         d.toString().split('\n').filter(l => l.trim()).forEach(line => {
           socket.emit('kernel:dmesg:line', { line });
         });
       });
+
+      dmesg.stderr.on('data', (d) => {
+        const err = d.toString().trim();
+        if (err) {
+          if (err.includes('password') || err.includes('sudo')) {
+            socket.emit('kernel:dmesg:line', { 
+              line: `[error] sudo requires password. Run 'sudo chmod +s /bin/dmesg' or configure NOPASSWD in sudoers for this user.` 
+            });
+          } else {
+            socket.emit('kernel:dmesg:line', { line: `[error] ${err}` });
+          }
+        }
+      });
+
       const stop = () => { try { dmesg.kill(); } catch { /* ignore */ } };
       socket.once('kernel:dmesg:stop', stop);
       socket.once('disconnect', stop);
@@ -135,6 +181,10 @@ function initSocketHandlers(io) {
         let out = '';
         top.stdout.on('data', (d) => { out += d; });
         top.on('close', () => socket.emit('metrics:update', { data: out }));
+        top.on('error', (err) => {
+          logger.error(`Metrics spawn error: ${err.message}`);
+          socket.emit('metrics:error', { error: 'top command not found' });
+        });
       }, 2000);
       socket.once('metrics:stop', () => clearInterval(interval));
       socket.once('disconnect',   () => clearInterval(interval));
@@ -152,6 +202,10 @@ function initSocketHandlers(io) {
         watch.stdout.on('data', (d) =>
           socket.emit('files:change', { path: filePath, event: d.toString() })
         );
+        watch.on('error', (err) => {
+          logger.error(`inotifywait spawn error: ${err.message}`);
+          socket.emit('files:error', { error: 'inotifywait command not found. Install inotify-tools.' });
+        });
         const stop = () => { try { watch.kill(); } catch { /* ignore */ } };
         socket.once('files:unwatch', stop);
         socket.once('disconnect',    stop);

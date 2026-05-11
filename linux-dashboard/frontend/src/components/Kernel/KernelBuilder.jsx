@@ -85,6 +85,8 @@ export default function KernelBuilder() {
   const [buildLogs, setBuildLogs] = useState([])   // { line, level }
   const [buildResult, setBuildResult] = useState(null) // { success, koFile, loaded, error }
   const [sessionId, setSessionId] = useState(null)
+  const [moduleLoaded, setModuleLoaded] = useState(false) // live status from lsmod
+  const [loadingAction, setLoadingAction] = useState(false) // insmod/rmmod in progress
 
   // dmesg watch
   const [dmesgLines, setDmesgLines] = useState([])
@@ -168,26 +170,62 @@ export default function KernelBuilder() {
     emit('kernel:compile', { code, moduleName: modName, autoLoad, sessionId: sid })
   }
 
+  // Check if module is currently loaded via lsmod
+  const checkModuleLoaded = async (name) => {
+    try {
+      const r = await api.get('/kernel/modules')
+      const loaded = (r.data.modules || []).some(m => m.name === name)
+      setModuleLoaded(loaded)
+      return loaded
+    } catch {
+      return false
+    }
+  }
+
   // Load .ko manually after build
   const loadModule = async () => {
     if (!buildResult?.koFile) return
+    setLoadingAction(true)
     try {
       await api.post('/kernel/insmod', { module: buildResult.koFile })
+      setModuleLoaded(true)
       setBuildResult(r => ({ ...r, loaded: true }))
       setBuildLogs(prev => [...prev, { line: `[ok] Module loaded into kernel`, level: 'success' }])
     } catch (e) {
-      setBuildLogs(prev => [...prev, { line: `[error] ${e.response?.data?.error || 'insmod failed'}`, level: 'error' }])
+      const errMsg = e.response?.data?.error || 'insmod failed'
+      // "File exists" means already loaded
+      if (errMsg.toLowerCase().includes('file exists') || errMsg.toLowerCase().includes('exists')) {
+        setModuleLoaded(true)
+        setBuildResult(r => ({ ...r, loaded: true }))
+        setBuildLogs(prev => [...prev, { line: `[warn] Module already loaded in kernel`, level: 'warn' }])
+      } else {
+        setBuildLogs(prev => [...prev, { line: `[error] ${errMsg}`, level: 'error' }])
+      }
+    } finally {
+      setLoadingAction(false)
     }
   }
 
   // Unload module
   const unloadModule = async () => {
+    setLoadingAction(true)
     try {
       await api.post('/kernel/rmmod', { module: modName })
-      setBuildResult(r => ({ ...r, loaded: false }))
-      setBuildLogs(prev => [...prev, { line: `[ok] Module unloaded`, level: 'success' }])
+      setModuleLoaded(false)
+      setBuildResult(r => r ? ({ ...r, loaded: false }) : r)
+      setBuildLogs(prev => [...prev, { line: `[ok] Module "${modName}" unloaded`, level: 'success' }])
     } catch (e) {
-      setBuildLogs(prev => [...prev, { line: `[error] ${e.response?.data?.error || 'rmmod failed'}`, level: 'error' }])
+      const errMsg = e.response?.data?.error || 'rmmod failed'
+      // "not loaded" means already unloaded
+      if (errMsg.toLowerCase().includes('not currently loaded') || errMsg.toLowerCase().includes('no such')) {
+        setModuleLoaded(false)
+        setBuildResult(r => r ? ({ ...r, loaded: false }) : r)
+        setBuildLogs(prev => [...prev, { line: `[warn] Module was not loaded`, level: 'warn' }])
+      } else {
+        setBuildLogs(prev => [...prev, { line: `[error] ${errMsg}`, level: 'error' }])
+      }
+    } finally {
+      setLoadingAction(false)
     }
   }
 
@@ -391,17 +429,23 @@ export default function KernelBuilder() {
 
               {buildResult.success && (
                 <div className="flex gap-2 flex-wrap">
-                  {!buildResult.loaded ? (
-                    <button onClick={loadModule}
-                      className="btn-primary flex items-center gap-2 text-sm">
-                      <Zap size={13} /> insmod — Load into kernel
-                    </button>
-                  ) : (
-                    <button onClick={unloadModule}
-                      className="btn-danger flex items-center gap-2 text-sm">
-                      <Square size={13} /> rmmod — Unload
-                    </button>
-                  )}
+                  <button onClick={loadModule} disabled={loadingAction}
+                    className="btn-primary flex items-center gap-2 text-sm">
+                    {loadingAction ? <RefreshCw size={13} className="animate-spin" /> : <Zap size={13} />}
+                    insmod — Load
+                  </button>
+                  
+                  <button onClick={unloadModule} disabled={loadingAction}
+                    className="btn-danger flex items-center gap-2 text-sm">
+                    {loadingAction ? <RefreshCw size={13} className="animate-spin" /> : <Square size={13} />}
+                    rmmod — Unload
+                  </button>
+
+                  <button onClick={() => checkModuleLoaded(modName)}
+                    className="btn-ghost flex items-center gap-2 text-sm">
+                    <RefreshCw size={13} /> Check Status
+                  </button>
+
                   <button onClick={toggleDmesg}
                     className="btn-ghost flex items-center gap-2 text-sm"
                     style={watchingDmesg ? { color: 'var(--accent)', borderColor: 'rgba(34,211,238,0.3)' } : {}}>

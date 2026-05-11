@@ -21,6 +21,11 @@ router.get('/interfaces', authenticateToken, (req, res) => {
     ip.on('close', () => {
       res.json({ interfaces: output });
     });
+
+    ip.on('error', (err) => {
+      logger.error(`Failed to start ip: ${err.message}`);
+      res.status(500).json({ error: 'ip command not found or failed' });
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -38,6 +43,11 @@ router.get('/stats', authenticateToken, (req, res) => {
 
     ss.on('close', () => {
       res.json({ stats: output });
+    });
+
+    ss.on('error', (err) => {
+      logger.error(`Failed to start ss: ${err.message}`);
+      res.status(500).json({ error: 'ss command not found or failed' });
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -72,6 +82,11 @@ router.get('/connections', authenticateToken, (req, res) => {
 
       res.json({ connections, count: connections.length });
     });
+
+    ss.on('error', (err) => {
+      logger.error(`Failed to start ss: ${err.message}`);
+      res.status(500).json({ error: 'ss command not found or failed' });
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -89,6 +104,11 @@ router.get('/ports', authenticateToken, (req, res) => {
 
     ss.on('close', () => {
       res.json({ ports: output });
+    });
+
+    ss.on('error', (err) => {
+      logger.error(`Failed to start ss: ${err.message}`);
+      res.status(500).json({ error: 'ss command not found or failed' });
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -117,6 +137,11 @@ router.post('/ping', authenticateToken, (req, res) => {
 
     ping.on('close', (code) => {
       res.json({ result: output, success: code === 0 });
+    });
+
+    ping.on('error', (err) => {
+      logger.error(`Failed to start ping: ${err.message}`);
+      res.status(500).json({ error: 'ping command not found' });
     });
 
     setTimeout(() => {
@@ -191,6 +216,23 @@ router.get('/ifconfig', authenticateToken, (req, res) => {
 
     ifconfig.on('close', () => {
       res.json({ data: output });
+    });
+
+    ifconfig.on('error', (err) => {
+      // If ifconfig is missing (ENOENT), try 'ip addr' as fallback
+      if (err.code === 'ENOENT') {
+        const ip = spawn('ip', ['addr']);
+        let ipOutput = '';
+        ip.stdout.on('data', (d) => { ipOutput += d.toString(); });
+        ip.on('close', () => {
+          res.json({ data: ipOutput, notice: 'ifconfig not found, showing "ip addr" output instead' });
+        });
+        ip.on('error', () => {
+          res.status(500).json({ error: 'Neither ifconfig nor ip command found' });
+        });
+      } else {
+        res.status(500).json({ error: err.message });
+      }
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

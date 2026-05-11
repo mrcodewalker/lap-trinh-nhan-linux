@@ -44,6 +44,11 @@ router.get('/list', async (req, res) => {
 
       res.json({ processes, count: processes.length });
     });
+
+    ps.on('error', (err) => {
+      logger.error(`Failed to start ps: ${err.message}`);
+      res.status(500).json({ error: 'ps command not found or failed' });
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -146,6 +151,11 @@ router.get('/top', (req, res) => {
     top.on('close', () => {
       res.json({ data: output });
     });
+
+    top.on('error', (err) => {
+      logger.error(`Failed to start top: ${err.message}`);
+      res.status(500).json({ error: 'top command not found or failed' });
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -211,6 +221,11 @@ router.get('/disk', (req, res) => {
         });
 
       res.json({ disks });
+    });
+
+    df.on('error', (err) => {
+      logger.error(`Failed to start df: ${err.message}`);
+      res.status(500).json({ error: 'df command not found or failed' });
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -402,6 +417,23 @@ router.get('/network/ifconfig', (req, res) => {
 
     ifconfig.on('close', () => {
       res.json({ data: output });
+    });
+
+    ifconfig.on('error', (err) => {
+      // If ifconfig is missing (ENOENT), try 'ip addr' as fallback
+      if (err.code === 'ENOENT') {
+        const ip = spawn('ip', ['addr']);
+        let ipOutput = '';
+        ip.stdout.on('data', (d) => { ipOutput += d.toString(); });
+        ip.on('close', () => {
+          res.json({ data: ipOutput, notice: 'ifconfig not found, showing "ip addr" output instead' });
+        });
+        ip.on('error', () => {
+          res.status(500).json({ error: 'Neither ifconfig nor ip command found' });
+        });
+      } else {
+        res.status(500).json({ error: err.message });
+      }
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

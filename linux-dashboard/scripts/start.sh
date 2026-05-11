@@ -51,7 +51,7 @@ if [ "$MODE" = "dev" ]; then
     
     # Start frontend
     cd ../frontend
-    npm run dev
+    npm run dev -- --no-open
     
     # Cleanup
     kill $BACKEND_PID 2>/dev/null || true
