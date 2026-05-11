@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CalendarClock, Plus, Trash2, RefreshCw, X, Check, Clock } from 'lucide-react'
+import { CalendarClock, Plus, Trash2, RefreshCw, X, Check, Clock, AlertCircle, Terminal, Play } from 'lucide-react'
 import api from '../../utils/api'
 import { clsx } from 'clsx'
 
@@ -30,6 +30,9 @@ export default function CronManager() {
   const [runningJob, setRunningJob] = useState(null)
   const [runResult, setRunResult]   = useState(null)
 
+  const [showLog, setShowLog]       = useState(false)
+  const [logContent, setLogContent] = useState('')
+
   useEffect(() => { loadJobs() }, [])
 
   const loadJobs = async () => {
@@ -40,6 +43,20 @@ export default function CronManager() {
     } catch (e) {
       setError(e.response?.data?.error || 'Failed to load cron jobs')
     } finally { setLoading(false) }
+  }
+
+  const fetchLogs = async () => {
+    setShowLog(true)
+    setLogContent('Loading logs...')
+    try {
+      const h = await api.get('/shell/files/home')
+      const r = await api.get('/shell/files/read', { 
+        params: { file: `${h.data.home}/.dashboard_scripts/cron.log` } 
+      })
+      setLogContent(r.data.content || 'No logs yet.')
+    } catch (e) {
+      setLogContent('No execution logs found. Tasks will log to ~/.dashboard_scripts/cron.log automatically if created via this UI.')
+    }
   }
 
   const runNow = async (command) => {
@@ -64,6 +81,7 @@ export default function CronManager() {
     e.preventDefault()
     
     let finalCommand = form.command
+    let logSuffix = ' >> ~/.dashboard_scripts/cron.log 2>&1'
     
     if (form.mode === 'script' || form.mode === 'python') {
       const content = form.mode === 'python' ? form.pythonContent : form.scriptContent;
@@ -77,7 +95,7 @@ export default function CronManager() {
           name: scriptName, 
           content: content 
         })
-        finalCommand = `${interpreter} ${r.data.path}`
+        finalCommand = `${interpreter} ${r.data.path}${logSuffix}`
       } catch (e) {
         setError('Failed to save script: ' + (e.response?.data?.error || e.message))
         setSaving(false)
@@ -86,6 +104,11 @@ export default function CronManager() {
     } else if (!finalCommand.trim()) {
       setError('Command is required')
       return
+    } else {
+      // For raw commands, append log redirect if not present
+      if (!finalCommand.includes('>>')) {
+        finalCommand += logSuffix
+      }
     }
 
     setSaving(true)
@@ -116,6 +139,44 @@ export default function CronManager() {
 
   return (
     <div className="space-y-4">
+      {/* Log modal */}
+      <AnimatePresence>
+        {showLog && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95 }}
+              className="card w-full max-w-4xl overflow-hidden flex flex-col max-h-[85vh] border-cyan-500/20">
+              <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
+                <div className="flex items-center gap-3">
+                  <Terminal size={18} className="text-cyan-400" />
+                  <div>
+                    <h3 className="text-sm font-bold">Cron Execution Logs</h3>
+                    <p className="text-[10px] text-white/30 uppercase tracking-widest">~/.dashboard_scripts/cron.log</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={fetchLogs} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white">
+                    <RefreshCw size={16} />
+                  </button>
+                  <button onClick={() => setShowLog(false)} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white">
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+              <div className="p-6 overflow-auto bg-[#050608] flex-1 custom-scrollbar">
+                <pre className="text-xs font-mono text-cyan-400/80 leading-relaxed whitespace-pre-wrap">
+                  {logContent}
+                </pre>
+              </div>
+              <div className="p-4 border-t border-white/10 bg-white/5 flex justify-between items-center">
+                <p className="text-[10px] text-white/20 italic">Logs are appended automatically for tasks created via this dashboard.</p>
+                <button onClick={() => setShowLog(false)} className="btn-primary py-2 px-6 text-xs font-bold">Close Logs</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Run result modal/banner */}
       <AnimatePresence>
         {runResult && (
@@ -160,6 +221,9 @@ export default function CronManager() {
         <div className="flex items-center gap-2">
           <button onClick={loadJobs} className="btn-ghost p-2 rounded-lg bg-white/5">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          </button>
+          <button onClick={fetchLogs} className="btn-ghost flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white/5 hover:bg-cyan-500/10 transition-all border border-white/5">
+            <Terminal size={14} /> View Logs
           </button>
           <button onClick={() => setShowForm(v => !v)} className="btn-primary flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-cyan-500/20">
             <Plus size={16} /> New Task
