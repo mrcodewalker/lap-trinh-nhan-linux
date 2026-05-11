@@ -175,6 +175,7 @@ router.post('/files/chmod', (req, res) => {
     });
 
     chmod.on('close', (code) => {
+      if (res.headersSent) return;
       if (code === 0) {
         logger.info(`Permissions changed: ${file} to ${mode}`);
         res.json({ message: 'Permissions changed successfully' });
@@ -182,8 +183,11 @@ router.post('/files/chmod', (req, res) => {
         res.status(500).json({ error: error || 'Failed to change permissions' });
       }
     });
+    chmod.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: err.message });
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -250,15 +254,20 @@ router.get('/files/search', (req, res) => {
     });
 
     find.on('close', () => {
+      if (res.headersSent) return;
       const files = output.split('\n').filter(f => f.trim());
       res.json({ files, count: files.length });
+    });
+
+    find.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: err.message });
     });
 
     setTimeout(() => {
       find.kill();
     }, 5000);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -280,6 +289,7 @@ router.get('/cron/list', (req, res) => {
     });
 
     crontab.on('close', () => {
+      if (res.headersSent) return;
       const lines = output.split('\n').filter(line => line.trim() && !line.startsWith('#'));
       const jobs = lines.map((line, idx) => {
         const parts = line.split(/\s+/);
@@ -298,8 +308,11 @@ router.get('/cron/list', (req, res) => {
 
       res.json({ jobs, count: jobs.length });
     });
+    crontab.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: err.message });
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -393,6 +406,7 @@ router.get('/packages/list', (req, res) => {
     });
 
     dpkg.on('close', () => {
+      if (res.headersSent) return;
       const lines = output.split('\n').slice(5);
       const packages = lines
         .filter(line => line.trim() && line.startsWith('ii'))
@@ -409,8 +423,11 @@ router.get('/packages/list', (req, res) => {
 
       res.json({ packages, count: packages.length });
     });
+    dpkg.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: err.message });
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -431,14 +448,18 @@ router.get('/packages/search', (req, res) => {
     });
 
     apt.on('close', () => {
-      res.json({ results: output });
+      if (!res.headersSent) res.json({ results: output });
+    });
+
+    apt.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: err.message });
     });
 
     setTimeout(() => {
       apt.kill();
     }, 10000);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -466,19 +487,25 @@ router.post('/packages/install', (req, res) => {
     });
 
     apt.on('close', (code) => {
-      res.json({
-        message: code === 0 ? 'Package installed successfully' : 'Installation failed',
-        output,
-        error,
-        success: code === 0
-      });
+      if (!res.headersSent) {
+        res.json({
+          message: code === 0 ? 'Package installed successfully' : 'Installation failed',
+          output,
+          error,
+          success: code === 0
+        });
+      }
+    });
+
+    apt.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: err.message });
     });
 
     setTimeout(() => {
       apt.kill();
     }, 60000);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 

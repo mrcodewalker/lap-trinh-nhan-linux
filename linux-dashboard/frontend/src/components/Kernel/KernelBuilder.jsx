@@ -39,23 +39,106 @@ static void __exit hello_exit(void) {
 module_init(hello_init);
 module_exit(hello_exit);`,
   },
-  proc: {
-    label: 'Proc FS',
-    modName: 'proc_module',
-    desc: 'Create /proc entry, seq_file read/write',
-    code: null, // loaded from server
+  proc_list: {
+    label: 'Process List',
+    modName: 'proc_list_module',
+    desc: 'Iterate all processes in kernel space',
+    code: `#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
+#include <linux/sched/signal.h>
+#include <linux/init.h>
+
+MODULE_LICENSE("GPL");
+
+static int __init plist_init(void) {
+    struct task_struct *task;
+    printk(KERN_INFO "plist: Listing all processes:\\n");
+    for_each_process(task) {
+        printk(KERN_INFO "plist: [%d] %s\\n", task->pid, task->comm);
+    }
+    return 0;
+}
+
+static void __exit plist_exit(void) {
+    printk(KERN_INFO "plist: unloaded\\n");
+}
+
+module_init(plist_init);
+module_exit(plist_exit);`,
+  },
+  sysfs: {
+    label: 'Sysfs Entry',
+    modName: 'sysfs_module',
+    desc: 'Create /sys/kernel/sysfs_module/status',
+    code: `#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
+#include <linux/init.h>
+
+MODULE_LICENSE("GPL");
+
+static struct kobject *kobj;
+static int status_val = 100;
+
+static ssize_t status_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf) {
+    return sprintf(buf, "%d\\n", status_val);
+}
+
+static ssize_t status_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count) {
+    sscanf(buf, "%du", &status_val);
+    return count;
+}
+
+static struct kobj_attribute status_attr = __ATTR(status, 0660, status_show, status_store);
+
+static int __init sysfs_init(void) {
+    int error = 0;
+    kobj = kobject_create_and_add("sysfs_module", kernel_kobj);
+    if (!kobj) return -ENOMEM;
+    error = sysfs_create_file(kobj, &status_attr.attr);
+    if (error) kobject_put(kobj);
+    return error;
+}
+
+static void __exit sysfs_exit(void) {
+    kobject_put(kobj);
+}
+
+module_init(sysfs_init);
+module_exit(sysfs_exit);`,
   },
   timer: {
     label: 'Kernel Timer',
     modName: 'timer_module',
-    desc: 'Periodic timer callback, workqueue',
-    code: null,
-  },
-  chardev: {
-    label: 'Char Device',
-    modName: 'chardev_module',
-    desc: 'Character device driver, ring buffer',
-    code: null,
+    desc: 'Periodic timer callback every 5s',
+    code: `#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/timer.h>
+#include <linux/init.h>
+
+MODULE_LICENSE("GPL");
+
+static struct timer_list my_timer;
+
+void timer_callback(struct timer_list *t) {
+    printk(KERN_INFO "timer_module: tick!\\n");
+    mod_timer(&my_timer, jiffies + msecs_to_jiffies(5000));
+}
+
+static int __init t_init(void) {
+    timer_setup(&my_timer, timer_callback, 0);
+    mod_timer(&my_timer, jiffies + msecs_to_jiffies(5000));
+    return 0;
+}
+
+static void __exit t_exit(void) {
+    del_timer(&my_timer);
+}
+
+module_init(t_init);
+module_exit(t_exit);`,
   },
 }
 

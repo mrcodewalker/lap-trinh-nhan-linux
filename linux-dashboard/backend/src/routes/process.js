@@ -22,6 +22,7 @@ router.get('/list', async (req, res) => {
     });
 
     ps.on('close', () => {
+      if (res.headersSent) return;
       const lines = output.split('\n').slice(1);
       const processes = lines
         .filter(line => line.trim())
@@ -46,11 +47,12 @@ router.get('/list', async (req, res) => {
     });
 
     ps.on('error', (err) => {
+      if (res.headersSent) return;
       logger.error(`Failed to start ps: ${err.message}`);
       res.status(500).json({ error: 'ps command not found or failed' });
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -65,14 +67,14 @@ router.get('/tree', async (req, res) => {
     });
 
     ps.on('close', () => {
-      res.json({ tree: output });
+      if (!res.headersSent) res.json({ tree: output });
     });
 
     ps.on('error', () => {
-      res.json({ tree: 'pstree not available' });
+      if (!res.headersSent) res.json({ tree: 'pstree not available' });
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -88,14 +90,14 @@ router.get('/info/:pid', (req, res) => {
     });
 
     ps.on('close', () => {
-      res.json({ info: output, pid });
+      if (!res.headersSent) res.json({ info: output, pid });
     });
 
     ps.on('error', (err) => {
-      res.status(404).json({ error: `Process ${pid} not found` });
+      if (!res.headersSent) res.status(404).json({ error: `Process ${pid} not found` });
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -149,15 +151,16 @@ router.get('/top', (req, res) => {
     });
 
     top.on('close', () => {
-      res.json({ data: output });
+      if (!res.headersSent) res.json({ data: output });
     });
 
     top.on('error', (err) => {
+      if (res.headersSent) return;
       logger.error(`Failed to start top: ${err.message}`);
       res.status(500).json({ error: 'top command not found or failed' });
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -205,6 +208,7 @@ router.get('/disk', (req, res) => {
     });
 
     df.on('close', () => {
+      if (res.headersSent) return;
       const lines = output.split('\n').slice(1);
       const disks = lines
         .filter(line => line.trim())
@@ -224,11 +228,12 @@ router.get('/disk', (req, res) => {
     });
 
     df.on('error', (err) => {
+      if (res.headersSent) return;
       logger.error(`Failed to start df: ${err.message}`);
       res.status(500).json({ error: 'df command not found or failed' });
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -245,10 +250,14 @@ router.get('/network/interfaces', (req, res) => {
     });
 
     ip.on('close', () => {
-      res.json({ interfaces: output });
+      if (!res.headersSent) res.json({ interfaces: output });
+    });
+
+    ip.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: 'ip command not found or failed' });
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -263,6 +272,7 @@ router.get('/network/connections', (req, res) => {
     });
 
     ss.on('close', () => {
+      if (res.headersSent) return;
       const lines = output.split('\n').slice(1);
       const connections = lines
         .filter(line => line.trim())
@@ -280,8 +290,12 @@ router.get('/network/connections', (req, res) => {
 
       res.json({ connections, count: connections.length });
     });
+
+    ss.on('error', () => {
+      if (!res.headersSent) res.status(500).json({ error: 'ss command failed' });
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -296,10 +310,13 @@ router.get('/network/ports', (req, res) => {
     });
 
     ss.on('close', () => {
-      res.json({ ports: output });
+      if (!res.headersSent) res.json({ ports: output });
+    });
+    ss.on('error', () => {
+      if (!res.headersSent) res.status(500).json({ error: 'ss command failed' });
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -314,10 +331,13 @@ router.get('/network/stats', (req, res) => {
     });
 
     ss.on('close', () => {
-      res.json({ stats: output });
+      if (!res.headersSent) res.json({ stats: output });
+    });
+    ss.on('error', () => {
+      if (!res.headersSent) res.status(500).json({ error: 'ss command failed' });
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -342,14 +362,18 @@ router.post('/network/ping', (req, res) => {
     });
 
     ping.on('close', (code) => {
-      res.json({ result: output, success: code === 0 });
+      if (!res.headersSent) res.json({ result: output, success: code === 0 });
+    });
+
+    ping.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: 'ping failed: ' + err.message });
     });
 
     setTimeout(() => {
       ping.kill();
     }, 10000);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -416,27 +440,28 @@ router.get('/network/ifconfig', (req, res) => {
     });
 
     ifconfig.on('close', () => {
-      res.json({ data: output });
+      if (!res.headersSent) res.json({ data: output });
     });
 
     ifconfig.on('error', (err) => {
+      if (res.headersSent) return;
       // If ifconfig is missing (ENOENT), try 'ip addr' as fallback
       if (err.code === 'ENOENT') {
         const ip = spawn('ip', ['addr']);
         let ipOutput = '';
         ip.stdout.on('data', (d) => { ipOutput += d.toString(); });
         ip.on('close', () => {
-          res.json({ data: ipOutput, notice: 'ifconfig not found, showing "ip addr" output instead' });
+          if (!res.headersSent) res.json({ data: ipOutput, notice: 'ifconfig not found, showing "ip addr" output instead' });
         });
         ip.on('error', () => {
-          res.status(500).json({ error: 'Neither ifconfig nor ip command found' });
+          if (!res.headersSent) res.status(500).json({ error: 'Neither ifconfig nor ip command found' });
         });
       } else {
-        res.status(500).json({ error: err.message });
+        if (!res.headersSent) res.status(500).json({ error: err.message });
       }
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -460,10 +485,14 @@ router.get('/logs/journalctl', (req, res) => {
     });
 
     journalctl.on('close', () => {
-      res.json({ logs: output });
+      if (!res.headersSent) res.json({ logs: output });
+    });
+
+    journalctl.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: 'journalctl failed: ' + err.message });
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -478,14 +507,14 @@ router.get('/logs/auth', (req, res) => {
     });
 
     tail.on('close', () => {
-      res.json({ logs: output });
+      if (!res.headersSent) res.json({ logs: output });
     });
 
     tail.on('error', () => {
-      res.json({ logs: 'Auth log not available' });
+      if (!res.headersSent) res.json({ logs: 'Auth log not available' });
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -500,11 +529,16 @@ router.get('/logs/kernel', (req, res) => {
     });
 
     dmesg.on('close', () => {
+      if (res.headersSent) return;
       const lines = output.split('\n').slice(-100);
       res.json({ logs: lines.join('\n') });
     });
+
+    dmesg.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: 'dmesg failed' });
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 

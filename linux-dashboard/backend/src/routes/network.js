@@ -19,15 +19,16 @@ router.get('/interfaces', authenticateToken, (req, res) => {
     });
 
     ip.on('close', () => {
-      res.json({ interfaces: output });
+      if (!res.headersSent) res.json({ interfaces: output });
     });
 
     ip.on('error', (err) => {
+      if (res.headersSent) return;
       logger.error(`Failed to start ip: ${err.message}`);
       res.status(500).json({ error: 'ip command not found or failed' });
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -42,15 +43,16 @@ router.get('/stats', authenticateToken, (req, res) => {
     });
 
     ss.on('close', () => {
-      res.json({ stats: output });
+      if (!res.headersSent) res.json({ stats: output });
     });
 
     ss.on('error', (err) => {
+      if (res.headersSent) return;
       logger.error(`Failed to start ss: ${err.message}`);
       res.status(500).json({ error: 'ss command not found or failed' });
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -65,6 +67,7 @@ router.get('/connections', authenticateToken, (req, res) => {
     });
 
     ss.on('close', () => {
+      if (res.headersSent) return;
       const lines = output.split('\n').slice(1);
       const connections = lines
         .filter(line => line.trim())
@@ -84,11 +87,12 @@ router.get('/connections', authenticateToken, (req, res) => {
     });
 
     ss.on('error', (err) => {
+      if (res.headersSent) return;
       logger.error(`Failed to start ss: ${err.message}`);
       res.status(500).json({ error: 'ss command not found or failed' });
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -103,15 +107,16 @@ router.get('/ports', authenticateToken, (req, res) => {
     });
 
     ss.on('close', () => {
-      res.json({ ports: output });
+      if (!res.headersSent) res.json({ ports: output });
     });
 
     ss.on('error', (err) => {
+      if (res.headersSent) return;
       logger.error(`Failed to start ss: ${err.message}`);
       res.status(500).json({ error: 'ss command not found or failed' });
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -136,10 +141,11 @@ router.post('/ping', authenticateToken, (req, res) => {
     });
 
     ping.on('close', (code) => {
-      res.json({ result: output, success: code === 0 });
+      if (!res.headersSent) res.json({ result: output, success: code === 0 });
     });
 
     ping.on('error', (err) => {
+      if (res.headersSent) return;
       logger.error(`Failed to start ping: ${err.message}`);
       res.status(500).json({ error: 'ping command not found' });
     });
@@ -148,7 +154,7 @@ router.post('/ping', authenticateToken, (req, res) => {
       ping.kill();
     }, 10000);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -169,14 +175,18 @@ router.post('/traceroute', authenticateToken, (req, res) => {
     });
 
     tr.on('close', () => {
-      res.json({ result: output });
+      if (!res.headersSent) res.json({ result: output });
+    });
+
+    tr.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: 'traceroute failed' });
     });
 
     setTimeout(() => {
       tr.kill();
     }, 15000);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -197,10 +207,14 @@ router.post('/dns', authenticateToken, (req, res) => {
     });
 
     dig.on('close', () => {
-      res.json({ result: output });
+      if (!res.headersSent) res.json({ result: output });
+    });
+
+    dig.on('error', () => {
+      if (!res.headersSent) res.status(500).json({ error: 'dig command failed' });
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -215,27 +229,28 @@ router.get('/ifconfig', authenticateToken, (req, res) => {
     });
 
     ifconfig.on('close', () => {
-      res.json({ data: output });
+      if (!res.headersSent) res.json({ data: output });
     });
 
     ifconfig.on('error', (err) => {
+      if (res.headersSent) return;
       // If ifconfig is missing (ENOENT), try 'ip addr' as fallback
       if (err.code === 'ENOENT') {
         const ip = spawn('ip', ['addr']);
         let ipOutput = '';
         ip.stdout.on('data', (d) => { ipOutput += d.toString(); });
         ip.on('close', () => {
-          res.json({ data: ipOutput, notice: 'ifconfig not found, showing "ip addr" output instead' });
+          if (!res.headersSent) res.json({ data: ipOutput, notice: 'ifconfig not found, showing "ip addr" output instead' });
         });
         ip.on('error', () => {
-          res.status(500).json({ error: 'Neither ifconfig nor ip command found' });
+          if (!res.headersSent) res.status(500).json({ error: 'Neither ifconfig nor ip command found' });
         });
       } else {
-        res.status(500).json({ error: err.message });
+        if (!res.headersSent) res.status(500).json({ error: err.message });
       }
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 

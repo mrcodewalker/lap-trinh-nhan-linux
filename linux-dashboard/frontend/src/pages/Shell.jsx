@@ -1,23 +1,25 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/UI/Tabs'
-import { Terminal, FolderOpen, Package, Clock, CalendarClock } from 'lucide-react'
+import { Terminal, FolderOpen, Package, Clock, CalendarClock, Zap } from 'lucide-react'
 import TerminalPanel from '../components/Terminal/TerminalPanel'
 import FileManager from '../components/Shell/FileManager'
 import PackageManager from '../components/Shell/PackageManager'
 import CronManager from '../components/Shell/CronManager'
 import SystemTime from '../components/Shell/SystemTime'
+import AutomationHub from '../components/Shell/AutomationHub'
 
 const TABS = [
-  { value: 'terminal', label: 'Terminal',     icon: Terminal },
-  { value: 'files',    label: 'Files',        icon: FolderOpen },
-  { value: 'packages', label: 'Packages',     icon: Package },
-  { value: 'cron',     label: 'Cron Jobs',    icon: CalendarClock },
-  { value: 'time',     label: 'System Time',  icon: Clock },
+  { value: 'automation', label: 'Automation', icon: Zap },
+  { value: 'terminal',   label: 'Terminal',   icon: Terminal },
+  { value: 'files',      label: 'Files',      icon: FolderOpen },
+  { value: 'packages',   label: 'Packages',   icon: Package },
+  { value: 'cron',       label: 'Cron Jobs',  icon: CalendarClock },
+  { value: 'time',       label: 'System Time', icon: Clock },
 ]
 
 export default function Shell() {
-  const [activeTab, setActiveTab] = useState('terminal')
+  const [activeTab, setActiveTab] = useState('automation')
 
   return (
     <motion.div
@@ -40,7 +42,10 @@ export default function Shell() {
         </TabsList>
 
         {/* Content panels */}
-        <div className="flex-1 min-h-0 overflow-auto">
+        <div className="flex-1 min-h-0 overflow-auto scroll-smooth">
+          <TabsContent value="automation">
+            <AutomationHub />
+          </TabsContent>
           <TabsContent value="terminal" className="h-full">
             <TerminalPanel />
           </TabsContent>
