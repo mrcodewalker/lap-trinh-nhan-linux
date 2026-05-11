@@ -40,6 +40,7 @@ export default function FileManager() {
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState(null)
   const [renaming, setRenaming] = useState(null) // { oldName: '', newName: '' }
+  const [isRenaming, setIsRenaming] = useState(false)
 
   const loadFiles = useCallback(async (dir = currentDir) => {
     setLoading(true)
@@ -83,11 +84,13 @@ export default function FileManager() {
     }
   }
 
-  const handleRename = async () => {
-    if (!renaming.newName.trim() || renaming.newName === renaming.oldName) {
+  const handleRename = async (e) => {
+    e.preventDefault()
+    if (!renaming.newName || renaming.newName === renaming.oldName) {
       setRenaming(null)
       return
     }
+    setIsRenaming(true)
     try {
       const oldPath = `${currentDir}/${renaming.oldName}`.replace(/\/+/g, '/')
       const newPath = `${currentDir}/${renaming.newName}`.replace(/\/+/g, '/')
@@ -95,7 +98,9 @@ export default function FileManager() {
       setRenaming(null)
       loadFiles()
     } catch (err) {
-      setError(err.response?.data?.error || 'Rename failed')
+      setError(err.response?.data?.error || 'Failed to rename')
+    } finally {
+      setIsRenaming(false)
     }
   }
 
@@ -107,33 +112,68 @@ export default function FileManager() {
       animate={{ opacity: 1, y: 0 }}
       className="flex flex-col h-full gap-4 max-h-[calc(100vh-180px)]"
     >
+      {/* Rename Modal */}
+      <AnimatePresence>
+        {renaming && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="modal-backdrop z-[100]" onClick={() => setRenaming(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9 }}
+              className="modal-box max-w-sm" onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold uppercase tracking-widest">Rename Item</h3>
+                <button onClick={() => setRenaming(null)}><X size={16} /></button>
+              </div>
+              <form onSubmit={handleRename} className="space-y-4">
+                <div>
+                  <label className="text-[10px] uppercase text-white/20 font-bold mb-1 block">New Name</label>
+                  <input 
+                    autoFocus
+                    value={renaming.newName}
+                    onChange={e => setRenaming({...renaming, newName: e.target.value})}
+                    className="input w-full font-mono"
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button type="button" onClick={() => setRenaming(null)} className="btn-ghost text-xs">Cancel</button>
+                  <button type="submit" disabled={isRenaming} className="btn-primary text-xs px-6">
+                    {isRenaming ? 'Renaming...' : 'Apply'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Top Bar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <button 
             onClick={handleBack}
             disabled={currentDir === '/' || loading}
-            className="p-2.5 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-30 transition-all shadow-lg"
+            className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 disabled:opacity-30 transition-all"
           >
             <ArrowLeft size={16} />
           </button>
           <div className="flex flex-col">
-            <h2 className="text-sm font-bold flex items-center gap-2 text-white/90">
-              <div className="w-6 h-6 rounded-lg bg-cyan-500/10 flex items-center justify-center border border-cyan-500/20">
-                <HardDrive size={12} className="text-cyan-400" />
-              </div>
+            <h2 className="text-sm font-semibold flex items-center gap-2">
+              <HardDrive size={14} className="text-cyan-400" />
               File Explorer
             </h2>
-            <div className="flex items-center gap-1 text-[9px] font-bold font-mono text-white/20 mt-0.5">
+            <div className="flex items-center gap-1 text-[10px] font-mono text-white/40">
               {currentDir.split('/').filter(Boolean).reduce((acc, part, i) => {
                 const path = '/' + currentDir.split('/').filter(Boolean).slice(0, i + 1).join('/')
                 return [...acc, { name: part, path }]
-              }, [{ name: 'ROOT', path: '/' }]).map((b, i, arr) => (
+              }, [{ name: 'root', path: '/' }]).map((b, i, arr) => (
                 <React.Fragment key={b.path}>
-                  <button onClick={() => loadFiles(b.path)} className="hover:text-cyan-400 transition-colors uppercase tracking-widest">
+                  <button onClick={() => loadFiles(b.path)} className="hover:text-cyan-400 transition-colors uppercase">
                     {b.name}
                   </button>
-                  {i < arr.length - 1 && <ChevronRight size={8} className="opacity-40" />}
+                  {i < arr.length - 1 && <ChevronRight size={10} />}
                 </React.Fragment>
               ))}
             </div>
@@ -142,33 +182,33 @@ export default function FileManager() {
 
         <div className="flex items-center gap-2 ml-auto">
           <div className="relative group">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-cyan-400 transition-colors" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 group-focus-within:text-cyan-400 transition-colors" />
             <input 
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Filter current view..."
-              className="pl-10 pr-4 py-2 bg-black/40 border border-white/10 rounded-2xl text-[11px] focus:outline-none focus:border-cyan-400/50 w-48 transition-all"
+              placeholder="Filter files..."
+              className="pl-9 pr-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs focus:outline-none focus:border-cyan-400/50 w-48 transition-all"
             />
           </div>
-          <div className="flex p-1 bg-white/5 border border-white/10 rounded-2xl">
+          <div className="flex p-1 bg-white/5 border border-white/10 rounded-xl">
             <button 
               onClick={() => setViewMode('list')}
-              className={clsx("p-1.5 rounded-xl transition-all", viewMode === 'list' ? "bg-cyan-500 text-black shadow-lg shadow-cyan-500/20" : "hover:bg-white/5 text-white/40")}
+              className={clsx("p-1.5 rounded-lg transition-all", viewMode === 'list' ? "bg-cyan-500/20 text-cyan-400" : "hover:bg-white/5 text-white/40")}
             >
               <List size={14} />
             </button>
             <button 
               onClick={() => setViewMode('grid')}
-              className={clsx("p-1.5 rounded-xl transition-all", viewMode === 'grid' ? "bg-cyan-500 text-black shadow-lg shadow-cyan-500/20" : "hover:bg-white/5 text-white/40")}
+              className={clsx("p-1.5 rounded-lg transition-all", viewMode === 'grid' ? "bg-cyan-500/20 text-cyan-400" : "hover:bg-white/5 text-white/40")}
             >
               <Grid size={14} />
             </button>
           </div>
           <button 
             onClick={() => loadFiles()}
-            className="p-2.5 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-white/60 shadow-lg"
+            className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-white/60"
           >
-            <RefreshCw size={16} className={loading ? "animate-spin text-cyan-400" : ""} />
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
           </button>
         </div>
       </div>
@@ -177,25 +217,22 @@ export default function FileManager() {
       <div className="flex-1 flex gap-4 min-h-0">
         {/* File List/Grid */}
         <div className={clsx(
-          "flex-1 bg-black/40 border border-white/5 rounded-3xl overflow-auto custom-scrollbar p-6 shadow-2xl",
-          viewMode === 'grid' ? "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-6 content-start" : "flex flex-col gap-1.5"
+          "flex-1 bg-black/20 border border-white/5 rounded-2xl overflow-auto custom-scrollbar p-4",
+          viewMode === 'grid' ? "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 content-start" : "flex flex-col gap-1"
         )}>
           {loading && files.length === 0 ? (
             <div className="col-span-full h-full flex flex-col items-center justify-center text-white/20 gap-3">
-              <div className="relative">
-                <HardDrive size={48} className="opacity-10" />
-                <RefreshCw size={20} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-spin text-cyan-500" />
-              </div>
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-400/50">Accessing File System</span>
+              <RefreshCw size={32} className="animate-spin" />
+              <span className="text-xs uppercase tracking-widest">Scanning Disk...</span>
             </div>
           ) : filteredFiles.length === 0 ? (
-            <div className="col-span-full h-full flex flex-col items-center justify-center text-white/10 gap-4">
-              <div className="w-20 h-20 rounded-3xl border-2 border-dashed border-white/5 flex items-center justify-center">
-                <Folder size={32} />
+            <div className="col-span-full h-full flex flex-col items-center justify-center text-white/20 gap-4">
+              <div className="w-16 h-16 rounded-full border-2 border-dashed border-white/10 flex items-center justify-center">
+                <Folder size={24} />
               </div>
               <div className="text-center">
-                <p className="text-sm font-bold text-white/20 tracking-widest uppercase">Empty Folder</p>
-                <p className="text-[9px] uppercase tracking-wider text-white/10 mt-1">Ready for your files</p>
+                <p className="text-sm font-medium">Empty Directory</p>
+                <p className="text-[10px] uppercase tracking-wider">No files found matching your search</p>
               </div>
             </div>
           ) : (
@@ -204,44 +241,41 @@ export default function FileManager() {
                 key={file.name}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: idx * 0.01 }}
+                transition={{ delay: idx * 0.02 }}
                 onClick={() => setSelected(file)}
                 onDoubleClick={() => handleNavigate(file)}
                 className={clsx(
-                  "group relative cursor-pointer transition-all duration-300",
+                  "group relative cursor-pointer transition-all",
                   viewMode === 'grid' 
                     ? clsx(
-                        "flex flex-col items-center p-5 rounded-3xl border shadow-xl",
-                        selected?.name === file.name 
-                          ? "bg-cyan-500/10 border-cyan-500/40 shadow-cyan-500/5 scale-105" 
-                          : "bg-white/[0.02] border-white/5 hover:bg-white/[0.05] hover:border-white/20 hover:-translate-y-1"
-                      )
-                    : clsx(
-                        "flex items-center p-4 rounded-2xl border",
+                        "flex flex-col items-center p-4 rounded-2xl border hover:shadow-2xl hover:shadow-cyan-500/5",
                         selected?.name === file.name 
                           ? "bg-cyan-500/10 border-cyan-500/30" 
-                          : "bg-transparent border-transparent hover:bg-white/[0.03] hover:border-white/10"
+                          : "bg-white/[0.02] border-white/5 hover:bg-white/5 hover:border-white/10"
+                      )
+                    : clsx(
+                        "flex items-center p-3 rounded-xl border",
+                        selected?.name === file.name 
+                          ? "bg-cyan-500/10 border-cyan-500/30" 
+                          : "bg-transparent border-transparent hover:bg-white/5 hover:border-white/5"
                       )
                 )}
               >
-                <div className={clsx(
-                  "transition-transform duration-300 group-hover:scale-110",
-                  viewMode === 'grid' ? "mb-4" : "mr-4"
-                )}>
+                <div className={clsx(viewMode === 'grid' ? "mb-3" : "mr-4")}>
                   {getFileIcon(file)}
                 </div>
                 
                 <div className={clsx("flex-1 min-w-0", viewMode === 'grid' ? "text-center" : "")}>
-                  <p className="text-xs font-bold truncate text-white/80 group-hover:text-cyan-400 transition-colors">
+                  <p className="text-xs font-medium truncate text-white/90 group-hover:text-cyan-400 transition-colors">
                     {file.name}
                   </p>
-                  <p className="text-[9px] text-white/20 font-bold uppercase tracking-widest mt-1">
+                  <p className="text-[10px] text-white/30 uppercase tracking-tighter">
                     {file.type === 'directory' ? 'Folder' : formatSize(file.size)}
                   </p>
                 </div>
 
                 {viewMode === 'list' && (
-                  <div className="hidden md:flex items-center gap-8 mr-6 text-[9px] font-bold font-mono text-white/10 uppercase tracking-widest">
+                  <div className="hidden md:flex items-center gap-6 mr-4 text-[10px] font-mono text-white/20 uppercase">
                     <span>{file.permissions}</span>
                     <span>{new Date(file.modified).toLocaleDateString()}</span>
                   </div>
@@ -249,7 +283,7 @@ export default function FileManager() {
 
                 <button 
                   onClick={(e) => { e.stopPropagation(); handleDelete(file); }}
-                  className="absolute right-3 top-3 p-1.5 rounded-xl bg-red-500/0 hover:bg-red-500/20 text-red-500/0 hover:text-red-400 transition-all opacity-0 group-hover:opacity-100 shadow-lg"
+                  className="absolute right-2 top-2 p-1.5 rounded-lg bg-red-500/0 hover:bg-red-500/20 text-red-500/0 hover:text-red-400 group-hover:text-red-500/40 transition-all opacity-0 group-hover:opacity-100"
                 >
                   <Trash2 size={12} />
                 </button>
@@ -262,59 +296,49 @@ export default function FileManager() {
         <AnimatePresence>
           {selected && (
             <motion.div 
-              initial={{ opacity: 0, x: 40 }}
+              initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 40 }}
-              className="w-80 bg-black/40 border border-white/10 rounded-3xl p-6 flex flex-col gap-6 shadow-2xl backdrop-blur-xl"
+              exit={{ opacity: 0, x: 20 }}
+              className="w-72 bg-black/40 border border-white/10 rounded-2xl p-5 flex flex-col gap-6"
             >
               <div className="flex items-center justify-between">
-                <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Object Metadata</h3>
-                <button onClick={() => setSelected(null)} className="p-1.5 hover:bg-white/5 rounded-lg transition-colors text-white/20 hover:text-white">
-                  <X size={14} />
-                </button>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-white/40">Item Properties</h3>
+                <button onClick={() => setSelected(null)} className="text-white/20 hover:text-white"><X size={14} /></button>
               </div>
 
-              <div className="flex flex-col items-center gap-5 py-6 bg-white/[0.02] rounded-3xl border border-white/5">
-                <div className="w-24 h-24 rounded-3xl bg-black/40 flex items-center justify-center shadow-2xl border border-white/5 relative overflow-hidden group">
-                  {React.cloneElement(getFileIcon(selected), { size: 40 })}
-                  <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/0 to-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="flex flex-col items-center gap-4 py-4">
+                <div className="w-20 h-20 rounded-2xl bg-white/5 flex items-center justify-center shadow-inner">
+                  {React.cloneElement(getFileIcon(selected), { size: 36 })}
                 </div>
-                <div className="text-center overflow-hidden w-full px-4">
-                  <p className="text-sm font-bold text-white/90 truncate leading-tight">{selected.name}</p>
-                  <div className="flex items-center justify-center gap-2 mt-2">
-                    <span className="px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 text-[9px] font-bold uppercase tracking-widest border border-cyan-500/20">
-                      {selected.type}
-                    </span>
-                    <span className="text-[9px] text-white/20 font-bold uppercase">{selected.permissions}</span>
-                  </div>
+                <div className="text-center overflow-hidden w-full">
+                  <p className="text-sm font-bold truncate px-2">{selected.name}</p>
+                  <p className="text-xs text-cyan-400/60 font-mono mt-1 uppercase tracking-tighter">{selected.type}</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-4">
                 {[
-                  { label: 'Total Size', value: selected.type === 'directory' ? 'Calculating...' : formatSize(selected.size), icon: Info },
-                  { label: 'Last Modified', value: new Date(selected.modified).toLocaleString(), icon: RefreshCw },
-                  { label: 'Owner UID', value: '0 (root)', icon: HardDrive },
+                  { label: 'Size', value: selected.type === 'directory' ? '--' : formatSize(selected.size) },
+                  { label: 'Modified', value: new Date(selected.modified).toLocaleString() },
+                  { label: 'Permissions', value: selected.permissions },
+                  { label: 'Owner', value: 'root' },
                 ].map(item => (
-                  <div key={item.label} className="flex flex-col gap-1.5 group">
-                    <div className="flex items-center gap-1.5">
-                      <item.icon size={10} className="text-white/20" />
-                      <span className="text-[9px] uppercase text-white/20 font-bold tracking-widest">{item.label}</span>
-                    </div>
-                    <span className="text-xs text-white/70 font-mono pl-4 group-hover:text-cyan-400 transition-colors">{item.value}</span>
+                  <div key={item.label} className="flex flex-col gap-1">
+                    <span className="text-[10px] uppercase text-white/20 font-bold">{item.label}</span>
+                    <span className="text-xs text-white/70 font-mono">{item.value}</span>
                   </div>
                 ))}
               </div>
 
-              <div className="mt-auto flex flex-col gap-2 pt-6 border-t border-white/5">
-                <button className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-cyan-500 text-black text-[11px] font-bold hover:bg-cyan-400 transition-all shadow-lg shadow-cyan-500/20 active:scale-95">
-                  <Download size={14} /> Download File
+              <div className="mt-auto grid grid-cols-2 gap-2">
+                <button className="flex items-center justify-center gap-2 py-2 rounded-xl bg-cyan-500 text-black text-xs font-bold hover:bg-cyan-400 transition-all">
+                  <Download size={14} /> Get
                 </button>
                 <button 
                   onClick={() => setRenaming({ oldName: selected.name, newName: selected.name })}
-                  className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-white/5 border border-white/10 text-white text-[11px] font-bold hover:bg-white/10 transition-all active:scale-95"
+                  className="flex items-center justify-center gap-2 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-xs font-bold hover:bg-white/10 transition-all"
                 >
-                  <Edit2 size={14} /> Rename Item
+                  <Edit2 size={14} /> Edit
                 </button>
               </div>
             </motion.div>
@@ -322,52 +346,16 @@ export default function FileManager() {
         </AnimatePresence>
       </div>
 
-      {/* Rename Modal */}
-      <AnimatePresence>
-        {renaming && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="modal-backdrop z-50" onClick={() => setRenaming(null)}
-          >
-            <motion.div 
-              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9 }}
-              className="modal-box max-w-sm border-white/10 p-8 text-center" onClick={e => e.stopPropagation()}
-            >
-              <div className="w-16 h-16 rounded-3xl bg-cyan-500/10 flex items-center justify-center mx-auto mb-6 border border-cyan-500/20">
-                <Edit2 size={24} className="text-cyan-400" />
-              </div>
-              <h3 className="text-lg font-bold mb-1">Rename Item</h3>
-              <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold mb-6">Changing {renaming.oldName}</p>
-              
-              <input 
-                autoFocus
-                value={renaming.newName}
-                onChange={e => setRenaming({ ...renaming, newName: e.target.value })}
-                onKeyDown={e => e.key === 'Enter' && handleRename()}
-                className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-sm font-mono text-cyan-400 focus:border-cyan-500/50 outline-none mb-6 text-center shadow-inner"
-              />
-
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => setRenaming(null)} className="btn-ghost py-3 rounded-2xl text-xs font-bold">Cancel</button>
-                <button onClick={handleRename} className="btn-primary py-3 rounded-2xl text-xs font-bold">Apply Name</button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Footer / Stats */}
-      <div className="flex items-center justify-between px-6 py-3 bg-white/[0.03] border border-white/5 rounded-2xl text-[9px] text-white/20 uppercase font-bold tracking-[0.2em] backdrop-blur-md">
-        <div className="flex items-center gap-6">
-          <span className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-cyan-500" /> {files.length} ITEMS</span>
-          <span className="hidden sm:inline-block">{files.filter(f => f.type === 'directory').length} DIRECTORIES</span>
-          <span className="hidden sm:inline-block">{files.filter(f => f.type !== 'directory').length} FILES</span>
+      <div className="flex items-center justify-between px-4 py-2 bg-white/5 border border-white/5 rounded-xl text-[10px] text-white/30 uppercase font-bold tracking-widest">
+        <div className="flex items-center gap-4">
+          <span>{files.length} Total Items</span>
+          <span>{files.filter(f => f.type === 'directory').length} Folders</span>
+          <span>{files.filter(f => f.type !== 'directory').length} Files</span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className={clsx("flex items-center gap-1.5 transition-colors", loading ? "text-yellow-400" : "text-emerald-400")}>
-             <div className={clsx("w-1.5 h-1.5 rounded-full", loading ? "bg-yellow-400 animate-pulse" : "bg-emerald-500")} />
-             DISK {loading ? 'INDEXING' : 'IDLE'}
-          </span>
+        <div className="flex items-center gap-2">
+          <div className={clsx("w-2 h-2 rounded-full", loading ? "bg-yellow-400 animate-pulse" : "bg-green-500")} />
+          <span>System {loading ? 'Busy' : 'Ready'}</span>
         </div>
       </div>
     </motion.div>
