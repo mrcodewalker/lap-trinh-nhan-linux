@@ -654,27 +654,6 @@ router.post('/time/timezone', (req, res) => {
       } else {
         res.status(500).json({ error: error || 'Failed to set timezone' });
       }
-// POST /api/shell/cron/run - Run a cron command immediately
-router.post('/cron/run', (req, res) => {
-  try {
-    const { command } = req.body;
-    if (!command) return res.status(400).json({ error: 'Command required' });
-
-    logger.info(`Manually running cron command: ${command}`);
-    const child = spawn('bash', ['-c', command]);
-    let output = '';
-    let error = '';
-
-    child.stdout.on('data', (data) => output += data.toString());
-    child.stderr.on('data', (data) => error += data.toString());
-
-    child.on('close', (code) => {
-      res.json({
-        success: code === 0,
-        output: output || '(no output)',
-        error: error,
-        code
-      });
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

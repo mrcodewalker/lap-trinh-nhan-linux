@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   RefreshCw, Trash2, Info, X, AlertTriangle, Upload,
-  Cpu, CheckCircle, AlertCircle, Search, Zap, Package
+  Cpu, CheckCircle, AlertCircle, Search, Zap, Package, Plus
 } from 'lucide-react'
 import api from '../../utils/api'
+import { clsx } from 'clsx'
 
 export default function ModuleManager() {
   const [modules, setModules]       = useState([])

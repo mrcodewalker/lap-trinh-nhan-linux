@@ -56,9 +56,9 @@ app.use('/api/kernel', kernelRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'online', 
-    timestamp: new Date().toISOString(), 
+  res.json({
+    status: 'online',
+    timestamp: new Date().toISOString(),
     version: '2.0.0',
     modules: ['shell', 'process', 'kernel']
   });
