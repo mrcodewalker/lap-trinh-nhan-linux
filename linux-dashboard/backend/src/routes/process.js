@@ -417,27 +417,27 @@ router.post('/network/ping', (req, res) => {
 router.post('/network/traceroute', (req, res) => {
   try {
     const { host } = req.body;
-
-    if (!host) {
-      return res.status(400).json({ error: 'Host required' });
-    }
+    if (!host) return res.status(400).json({ error: 'Host required' });
 
     const tr = spawn('traceroute', ['-m', '30', host]);
     let output = '';
 
-    tr.stdout.on('data', (data) => {
-      output += data.toString();
+    tr.stdout.on('data', (data) => { output += data.toString(); });
+    tr.stderr.on('data', (data) => { output += data.toString(); });
+
+    tr.on('close', (code) => {
+      if (!res.headersSent) res.json({ result: output, success: code === 0 });
     });
 
-    tr.on('close', () => {
-      res.json({ result: output });
+    tr.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: 'traceroute failed: ' + err.message });
     });
 
     setTimeout(() => {
-      tr.kill();
-    }, 15000);
+      if (!tr.killed) tr.kill();
+    }, 30000);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -445,55 +445,56 @@ router.post('/network/traceroute', (req, res) => {
 router.post('/network/dns', (req, res) => {
   try {
     const { host } = req.body;
-
-    if (!host) {
-      return res.status(400).json({ error: 'Host required' });
-    }
+    if (!host) return res.status(400).json({ error: 'Host required' });
 
     const dig = spawn('dig', [host]);
     let output = '';
 
-    dig.stdout.on('data', (data) => {
-      output += data.toString();
+    dig.stdout.on('data', (data) => { output += data.toString(); });
+    dig.stderr.on('data', (data) => { output += data.toString(); });
+
+    dig.on('close', (code) => {
+      if (!res.headersSent) res.json({ result: output, success: code === 0 });
     });
 
-    dig.on('close', () => {
-      res.json({ result: output });
+    dig.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: 'dig/dns failed: ' + err.message });
     });
+
+    setTimeout(() => {
+      if (!dig.killed) dig.kill();
+    }, 10000);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/process/network/ifconfig - Get ifconfig output
+// GET /api/process/network/ifconfig - Get interfaces
 router.get('/network/ifconfig', (req, res) => {
   try {
     const ifconfig = spawn('ifconfig');
     let output = '';
 
-    ifconfig.stdout.on('data', (data) => {
-      output += data.toString();
-    });
-
+    ifconfig.stdout.on('data', (data) => { output += data.toString(); });
+    
     ifconfig.on('close', () => {
       if (!res.headersSent) res.json({ data: output });
     });
 
     ifconfig.on('error', (err) => {
       if (res.headersSent) return;
-      // If ifconfig is missing (ENOENT), try 'ip addr' as fallback
       if (err.code === 'ENOENT') {
         const ip = spawn('ip', ['addr']);
         let ipOutput = '';
         ip.stdout.on('data', (d) => { ipOutput += d.toString(); });
         ip.on('close', () => {
-          if (!res.headersSent) res.json({ data: ipOutput, notice: 'ifconfig not found, showing "ip addr" output instead' });
+          if (!res.headersSent) res.json({ data: ipOutput, notice: 'ifconfig not found' });
         });
         ip.on('error', () => {
-          if (!res.headersSent) res.status(500).json({ error: 'Neither ifconfig nor ip command found' });
+          if (!res.headersSent) res.status(500).json({ error: 'Networking tools not found' });
         });
       } else {
-        if (!res.headersSent) res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message });
       }
     });
   } catch (err) {
