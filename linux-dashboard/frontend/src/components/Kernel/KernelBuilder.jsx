@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Play, Square, Upload, Download, RefreshCw, CheckCircle,
   AlertCircle, X, Zap, FolderOpen, Trash2, Terminal,
-  ChevronRight, Info, Package
+  ChevronRight, Info, Package, Cpu, Code2, Save
 } from 'lucide-react'
 import api from '../../utils/api'
 import { useSocketStore } from '../../store/socketStore'
+import { clsx } from 'clsx'
 
 // ── Inline templates (fallback if server samples unavailable) ──────────────
 const BUILTIN = {
@@ -67,87 +68,6 @@ static void __exit plist_exit(void) {
 module_init(plist_init);
 module_exit(plist_exit);`,
   },
-  sysfs: {
-    label: 'Sysfs Entry',
-    modName: 'sysfs_module',
-    desc: 'Create /sys/kernel/sysfs_module/status',
-    code: `#include <linux/module.h>
-#include <linux/kernel.h>
-#include <linux/kobject.h>
-#include <linux/sysfs.h>
-#include <linux/init.h>
-
-MODULE_LICENSE("GPL");
-
-static struct kobject *kobj;
-static int status_val = 100;
-
-static ssize_t status_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf) {
-    return sprintf(buf, "%d\\n", status_val);
-}
-
-static ssize_t status_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count) {
-    sscanf(buf, "%du", &status_val);
-    return count;
-}
-
-static struct kobj_attribute status_attr = __ATTR(status, 0660, status_show, status_store);
-
-static int __init sysfs_init(void) {
-    int error = 0;
-    kobj = kobject_create_and_add("sysfs_module", kernel_kobj);
-    if (!kobj) return -ENOMEM;
-    error = sysfs_create_file(kobj, &status_attr.attr);
-    if (error) kobject_put(kobj);
-    return error;
-}
-
-static void __exit sysfs_exit(void) {
-    kobject_put(kobj);
-}
-
-module_init(sysfs_init);
-module_exit(sysfs_exit);`,
-  },
-  timer: {
-    label: 'Kernel Timer',
-    modName: 'timer_module',
-    desc: 'Periodic timer callback every 5s',
-    code: `#include <linux/module.h>
-#include <linux/kernel.h>
-#include <linux/timer.h>
-#include <linux/init.h>
-
-MODULE_LICENSE("GPL");
-
-static struct timer_list my_timer;
-
-void timer_callback(struct timer_list *t) {
-    printk(KERN_INFO "timer_module: tick!\\n");
-    mod_timer(&my_timer, jiffies + msecs_to_jiffies(5000));
-}
-
-static int __init t_init(void) {
-    timer_setup(&my_timer, timer_callback, 0);
-    mod_timer(&my_timer, jiffies + msecs_to_jiffies(5000));
-    return 0;
-}
-
-static void __exit t_exit(void) {
-    del_timer(&my_timer);
-}
-
-module_init(t_init);
-module_exit(t_exit);`,
-  },
-}
-
-// ── Log line color ─────────────────────────────────────────────────────────
-const logColor = (level) => {
-  if (level === 'error')   return 'var(--red)'
-  if (level === 'warn')    return 'var(--yellow)'
-  if (level === 'success') return 'var(--green)'
-  return 'var(--text2)'
 }
 
 export default function KernelBuilder() {
@@ -159,17 +79,12 @@ export default function KernelBuilder() {
   const [autoLoad, setAutoLoad] = useState(false)
   const [activeKey, setActiveKey] = useState('hello')
 
-  // Server samples
-  const [serverSamples, setServerSamples] = useState([])
-  const [showSamples, setShowSamples]     = useState(false)
-
   // Build state
   const [building, setBuilding]   = useState(false)
   const [buildLogs, setBuildLogs] = useState([])   // { line, level }
-  const [buildResult, setBuildResult] = useState(null) // { success, koFile, loaded, error }
-  const [sessionId, setSessionId] = useState(null)
-  const [moduleLoaded, setModuleLoaded] = useState(false) // live status from lsmod
-  const [loadingAction, setLoadingAction] = useState(false) // insmod/rmmod in progress
+  const [buildResult, setBuildResult] = useState(null)
+  const [moduleLoaded, setModuleLoaded] = useState(false)
+  const [loadingAction, setLoadingAction] = useState(false)
 
   // dmesg watch
   const [dmesgLines, setDmesgLines] = useState([])
@@ -178,415 +93,211 @@ export default function KernelBuilder() {
   const logsEndRef  = useRef(null)
   const dmesgEndRef = useRef(null)
 
-  // Auto-scroll logs
   useEffect(() => { logsEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [buildLogs])
   useEffect(() => { dmesgEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [dmesgLines])
 
-  // Load server samples list
-  useEffect(() => {
-    api.get('/kernel/samples')
-      .then(r => setServerSamples(r.data.samples || []))
-      .catch(() => {})
-  }, [])
-
-  // Socket listeners for compile streaming
+  // Socket listeners
   useEffect(() => {
     if (!socket) return
-
     const onLog  = (d) => setBuildLogs(prev => [...prev, { line: d.line, level: d.level }])
-    const onDone = (d) => { setBuilding(false); setBuildResult(d) }
-    const onDmesg = (d) => setDmesgLines(prev => [...prev.slice(-199), d.line])
+    const onDone = (d) => { setBuilding(false); setBuildResult(d); if(d.success) checkModuleLoaded(modName) }
+    const onDmesg = (d) => setDmesgLines(prev => [...prev.slice(-100), d.line])
 
     on('kernel:compile:log',  onLog)
     on('kernel:compile:done', onDone)
     on('kernel:dmesg:line',   onDmesg)
 
     return () => {
-      off('kernel:compile:log')
-      off('kernel:compile:done')
-      off('kernel:dmesg:line')
+      off('kernel:compile:log'); off('kernel:compile:done'); off('kernel:dmesg:line')
     }
-  }, [socket])
+  }, [socket, modName])
 
-  // Load a server sample by name
-  const loadServerSample = async (name) => {
-    try {
-      const r = await api.get(`/kernel/sample/${name}`)
-      setCode(r.data.code)
-      setModName(name)
-      setActiveKey(null)
-      setBuildLogs([])
-      setBuildResult(null)
-      setShowSamples(false)
-    } catch { /* silent */ }
-  }
-
-  // Apply builtin template (may need server fetch for non-hello)
-  const applyBuiltin = async (key) => {
+  const applyBuiltin = (key) => {
     const t = BUILTIN[key]
-    setActiveKey(key)
-    setModName(t.modName)
-    setBuildLogs([])
-    setBuildResult(null)
-
-    if (t.code) {
-      setCode(t.code)
-    } else {
-      // fetch from server samples
-      try {
-        const r = await api.get(`/kernel/sample/${t.modName}`)
-        setCode(r.data.code)
-      } catch {
-        setCode(`/* Could not load ${t.modName}.c from server.\n   Make sure kernel-samples/ directory exists. */`)
-      }
-    }
+    setActiveKey(key); setModName(t.modName); setCode(t.code); setBuildLogs([]); setBuildResult(null)
   }
 
-  // Start compile
   const compile = () => {
     if (!code.trim() || !modName.trim() || building) return
-    const sid = Date.now().toString()
-    setSessionId(sid)
-    setBuildLogs([])
-    setBuildResult(null)
-    setBuilding(true)
-    emit('kernel:compile', { code, moduleName: modName, autoLoad, sessionId: sid })
+    setBuildLogs([]); setBuildResult(null); setBuilding(true)
+    emit('kernel:compile', { code, moduleName: modName, autoLoad, sessionId: Date.now().toString() })
   }
 
-  // Check if module is currently loaded via lsmod
   const checkModuleLoaded = async (name) => {
     try {
       const r = await api.get('/kernel/modules')
       const loaded = (r.data.modules || []).some(m => m.name === name)
       setModuleLoaded(loaded)
-      return loaded
-    } catch {
-      return false
-    }
+    } catch { /* silent */ }
   }
 
-  // Load .ko manually after build
   const loadModule = async () => {
     if (!buildResult?.koFile) return
     setLoadingAction(true)
     try {
       await api.post('/kernel/insmod', { module: buildResult.koFile })
       setModuleLoaded(true)
-      setBuildResult(r => ({ ...r, loaded: true }))
       setBuildLogs(prev => [...prev, { line: `[ok] Module loaded into kernel`, level: 'success' }])
     } catch (e) {
-      const errMsg = e.response?.data?.error || 'insmod failed'
-      // "File exists" means already loaded
-      if (errMsg.toLowerCase().includes('file exists') || errMsg.toLowerCase().includes('exists')) {
-        setModuleLoaded(true)
-        setBuildResult(r => ({ ...r, loaded: true }))
-        setBuildLogs(prev => [...prev, { line: `[warn] Module already loaded in kernel`, level: 'warn' }])
-      } else {
-        setBuildLogs(prev => [...prev, { line: `[error] ${errMsg}`, level: 'error' }])
-      }
-    } finally {
-      setLoadingAction(false)
-    }
+      setBuildLogs(prev => [...prev, { line: `[error] ${e.response?.data?.error || 'insmod failed'}`, level: 'error' }])
+    } finally { setLoadingAction(false) }
   }
 
-  // Unload module
   const unloadModule = async () => {
     setLoadingAction(true)
     try {
       await api.post('/kernel/rmmod', { module: modName })
       setModuleLoaded(false)
-      setBuildResult(r => r ? ({ ...r, loaded: false }) : r)
-      setBuildLogs(prev => [...prev, { line: `[ok] Module "${modName}" unloaded`, level: 'success' }])
+      setBuildLogs(prev => [...prev, { line: `[ok] Module unloaded`, level: 'success' }])
     } catch (e) {
-      const errMsg = e.response?.data?.error || 'rmmod failed'
-      // "not loaded" means already unloaded
-      if (errMsg.toLowerCase().includes('not currently loaded') || errMsg.toLowerCase().includes('no such')) {
-        setModuleLoaded(false)
-        setBuildResult(r => r ? ({ ...r, loaded: false }) : r)
-        setBuildLogs(prev => [...prev, { line: `[warn] Module was not loaded`, level: 'warn' }])
-      } else {
-        setBuildLogs(prev => [...prev, { line: `[error] ${errMsg}`, level: 'error' }])
-      }
-    } finally {
-      setLoadingAction(false)
-    }
+      setBuildLogs(prev => [...prev, { line: `[error] ${e.response?.data?.error || 'rmmod failed'}`, level: 'error' }])
+    } finally { setLoadingAction(false) }
   }
 
-  // Toggle dmesg watch
   const toggleDmesg = () => {
     if (watchingDmesg) {
-      emit('kernel:dmesg:stop')
-      setWatchingDmesg(false)
+      emit('kernel:dmesg:stop'); setWatchingDmesg(false)
     } else {
-      setDmesgLines([])
-      emit('kernel:dmesg:watch')
-      setWatchingDmesg(true)
+      setDmesgLines([]); emit('kernel:dmesg:watch'); setWatchingDmesg(true)
     }
-  }
-
-  const downloadCode = () => {
-    const blob = new Blob([code], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = `${modName}.c`; a.click()
-    URL.revokeObjectURL(url)
   }
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 h-full">
-
-      {/* ── LEFT: Editor ─────────────────────────────────────── */}
-      <div className="flex flex-col gap-3 min-h-0">
-
-        {/* Template picker */}
-        <div className="card p-3">
-          <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text3)' }}>
-            Templates
-          </p>
-          <div className="grid grid-cols-2 gap-1.5">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full max-h-[calc(100vh-180px)] overflow-hidden">
+      
+      {/* Sidebar: Templates & Config */}
+      <div className="lg:col-span-3 space-y-4 overflow-y-auto pr-2 custom-scrollbar">
+        <div className="card p-5 space-y-4 border-white/5 bg-white/[0.02]">
+          <div className="flex items-center gap-2">
+            <Code2 size={16} className="text-cyan-400" />
+            <h3 className="text-xs font-bold uppercase tracking-widest text-white/80">Kernel Templates</h3>
+          </div>
+          <div className="space-y-2">
             {Object.entries(BUILTIN).map(([key, t]) => (
               <button key={key} onClick={() => applyBuiltin(key)}
-                className="p-2.5 rounded-xl text-left transition-all"
-                style={activeKey === key ? {
-                  background: 'rgba(34,211,238,0.08)',
-                  border: '1px solid rgba(34,211,238,0.25)',
-                } : {
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                }}>
-                <p className="text-xs font-semibold" style={{ color: activeKey === key ? 'var(--accent)' : 'var(--text)' }}>
-                  {t.label}
-                </p>
-                <p className="text-[10px] mt-0.5" style={{ color: 'var(--text3)' }}>{t.desc}</p>
+                className={clsx(
+                  "w-full p-4 rounded-2xl text-left border transition-all group",
+                  activeKey === key ? "bg-cyan-500/10 border-cyan-500/30" : "bg-black/20 border-white/5 hover:border-white/10"
+                )}>
+                <p className={clsx("text-xs font-bold", activeKey === key ? "text-cyan-400" : "text-white/60 group-hover:text-white")}>{t.label}</p>
+                <p className="text-[10px] text-white/30 mt-1 line-clamp-1">{t.desc}</p>
               </button>
             ))}
           </div>
+        </div>
 
-          {/* Server samples dropdown */}
-          {serverSamples.length > 0 && (
-            <div className="relative mt-2">
-              <button onClick={() => setShowSamples(v => !v)}
-                className="btn-ghost w-full flex items-center gap-2 text-xs justify-center">
-                <FolderOpen size={13} /> Load from kernel-samples/
-              </button>
-              <AnimatePresence>
-                {showSamples && (
-                  <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                    className="absolute top-full left-0 right-0 mt-1 z-20 card p-2 space-y-1">
-                    {serverSamples.map(s => (
-                      <button key={s.name} onClick={() => loadServerSample(s.name)}
-                        className="w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2"
-                        style={{ color: 'var(--text2)' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                        <Package size={12} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-                        <div>
-                          <p className="text-xs mono" style={{ color: 'var(--accent)' }}>{s.filename}</p>
-                          <p className="text-[10px]" style={{ color: 'var(--text3)' }}>{s.description}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+        <div className="card p-5 space-y-4 border-white/5 bg-white/[0.02]">
+          <div className="flex items-center gap-2">
+            <Cpu size={16} className="text-purple-400" />
+            <h3 className="text-xs font-bold uppercase tracking-widest text-white/80">Module Config</h3>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <label className="text-[10px] font-bold text-white/20 uppercase block mb-1.5 ml-1">Symbol Name</label>
+              <input value={modName} onChange={e => setModName(e.target.value)}
+                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono text-cyan-400 outline-none focus:border-cyan-500/50" />
             </div>
-          )}
-        </div>
-
-        {/* Module name + options */}
-        <div className="card p-3 flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <label className="text-xs flex-shrink-0" style={{ color: 'var(--text3)' }}>Name:</label>
-            <input value={modName} onChange={e => setModName(e.target.value)}
-              className="input py-1.5 text-xs mono flex-1" placeholder="module_name" />
+            <label className="flex items-center gap-3 p-3 rounded-xl bg-black/20 border border-white/5 cursor-pointer group">
+              <div className={clsx("w-4 h-4 rounded border flex items-center justify-center transition-all", autoLoad ? "bg-cyan-500 border-cyan-500" : "border-white/20 group-hover:border-white/40")}>
+                {autoLoad && <Check size={10} className="text-black" />}
+              </div>
+              <input type="checkbox" className="hidden" checked={autoLoad} onChange={e => setAutoLoad(e.target.checked)} />
+              <span className="text-xs text-white/40 font-bold uppercase tracking-tighter">Auto-load into kernel</span>
+            </label>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer flex-shrink-0">
-            <input type="checkbox" checked={autoLoad} onChange={e => setAutoLoad(e.target.checked)}
-              className="w-3.5 h-3.5 accent-cyan-400" />
-            <span className="text-xs" style={{ color: 'var(--text3)' }}>Auto-load</span>
-          </label>
-        </div>
-
-        {/* Code editor */}
-        <div className="terminal-wrap flex-1 flex flex-col min-h-0" style={{ minHeight: 320 }}>
-          <div className="terminal-header flex-shrink-0">
-            <span className="terminal-dot bg-red-400/60" />
-            <span className="terminal-dot bg-yellow-400/60" />
-            <span className="terminal-dot bg-green-400/60" />
-            <span className="text-xs ml-2 mono" style={{ color: 'var(--text3)' }}>{modName}.c</span>
-            <span className="ml-auto text-[10px]" style={{ color: 'var(--text3)' }}>
-              {code.split('\n').length} lines
-            </span>
-          </div>
-          <textarea value={code} onChange={e => setCode(e.target.value)}
-            className="flex-1 p-4 mono text-xs outline-none resize-none leading-relaxed"
-            style={{ background: 'var(--code-bg)', color: 'var(--code-text)', caretColor: 'var(--accent)', minHeight: 280 }}
-            spellCheck={false} />
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex gap-2">
-          <button onClick={compile} disabled={building || !code.trim()}
-            className="btn-primary flex items-center gap-2 flex-1 justify-center">
-            {building
-              ? <><RefreshCw size={14} className="animate-spin" /> Compiling...</>
-              : <><Play size={14} /> Compile{autoLoad ? ' & Load' : ''}</>
-            }
-          </button>
-          <button onClick={downloadCode} className="btn-ghost flex items-center gap-2">
-            <Download size={14} /> .c
-          </button>
-          <button onClick={() => { setCode(''); setBuildLogs([]); setBuildResult(null) }}
-            className="btn-ghost p-2" style={{ color: 'var(--red)' }}>
-            <Trash2 size={14} />
-          </button>
         </div>
       </div>
 
-      {/* ── RIGHT: Build output + dmesg ──────────────────────── */}
-      <div className="flex flex-col gap-3 min-h-0 overflow-y-auto pr-1">
+      {/* Editor & Console Area */}
+      <div className="lg:col-span-9 flex flex-col gap-4 min-h-0">
+        <div className="flex-1 flex flex-col min-h-0 bg-black/40 border border-white/10 rounded-3xl overflow-hidden shadow-2xl relative">
+          <div className="flex items-center justify-between px-6 py-3 bg-white/[0.03] border-b border-white/5">
+            <div className="flex items-center gap-4">
+              <div className="flex gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-red-500/40" />
+                <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/40" />
+                <div className="w-2.5 h-2.5 rounded-full bg-green-500/40" />
+              </div>
+              <span className="text-[10px] font-bold font-mono text-white/20 uppercase tracking-widest">{modName}.c</span>
+            </div>
+            <div className="flex items-center gap-4">
+               <button onClick={compile} disabled={building}
+                 className="flex items-center gap-2 px-6 py-2 rounded-xl bg-cyan-500 text-black text-[11px] font-bold hover:bg-cyan-400 transition-all shadow-lg shadow-cyan-500/20 active:scale-95 disabled:opacity-50">
+                 {building ? <RefreshCw size={14} className="animate-spin" /> : <Zap size={14} />}
+                 {building ? 'BUILDING...' : 'RUN MODULE'}
+               </button>
+            </div>
+          </div>
+          
+          <textarea 
+            value={code} onChange={e => setCode(e.target.value)}
+            className="flex-1 w-full bg-transparent p-8 font-mono text-sm text-cyan-400/90 outline-none resize-none leading-relaxed no-scrollbar"
+            spellCheck={false}
+          />
+          
+          {/* Floating Action Overlay */}
+          <div className="absolute right-6 bottom-6 flex gap-2">
+            <button className="p-3 rounded-2xl bg-black/60 border border-white/10 text-white/40 hover:text-white transition-all backdrop-blur-md">
+              <Download size={18} />
+            </button>
+          </div>
+        </div>
 
-        {/* Build log panel */}
-        <div className="card flex flex-col" style={{ minHeight: 280, maxHeight: 380 }}>
-          <div className="terminal-header flex-shrink-0">
-            <span className="terminal-dot bg-red-400/60" />
-            <span className="terminal-dot bg-yellow-400/60" />
-            <span className="terminal-dot bg-green-400/60" />
-            <span className="text-xs ml-2 mono" style={{ color: 'var(--text3)' }}>build output</span>
-            {building && <RefreshCw size={11} className="ml-auto animate-spin" style={{ color: 'var(--accent)' }} />}
-            {buildResult && !building && (
-              <span className="ml-auto flex items-center gap-1 text-xs"
-                style={{ color: buildResult.success ? 'var(--green)' : 'var(--red)' }}>
-                {buildResult.success ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
-                {buildResult.success ? 'OK' : 'FAILED'}
-              </span>
+        {/* Output Tabs (Build Logs / Dmesg) */}
+        <div className="h-64 bg-black/40 border border-white/10 rounded-3xl overflow-hidden flex flex-col shadow-2xl">
+          <div className="flex items-center justify-between px-6 py-2 bg-white/[0.03] border-b border-white/5">
+            <div className="flex gap-6">
+              <button className="text-[10px] font-bold uppercase tracking-widest text-cyan-400 border-b-2 border-cyan-500 pb-1 pt-1">Build Console</button>
+              <button onClick={toggleDmesg} className={clsx("text-[10px] font-bold uppercase tracking-widest transition-all pb-1 pt-1", watchingDmesg ? "text-green-400 border-b-2 border-green-500" : "text-white/20 hover:text-white/40")}>Kernel Log (dmesg)</button>
+            </div>
+            {moduleLoaded && (
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                <span className="text-[9px] font-bold text-green-400 uppercase">ACTIVE IN KERNEL</span>
+              </div>
             )}
           </div>
-
-          <div className="flex-1 overflow-y-auto p-3 mono text-xs space-y-px"
-            style={{ background: 'var(--code-bg)' }}>
-            {buildLogs.length === 0 ? (
-              <p className="text-center py-8" style={{ color: 'var(--text3)' }}>
-                Press Compile to start build
-              </p>
+          
+          <div className="flex-1 overflow-auto p-5 font-mono text-[11px] leading-relaxed custom-scrollbar">
+            {watchingDmesg ? (
+              dmesgLines.length === 0 ? <p className="text-white/10">Waiting for dmesg stream...</p> :
+              dmesgLines.map((line, i) => (
+                <div key={i} className="text-emerald-400/70 border-l border-emerald-500/20 pl-3 mb-0.5">{line}</div>
+              ))
             ) : (
+              buildLogs.length === 0 ? <p className="text-white/10">Ready for compilation output.</p> :
               buildLogs.map((l, i) => (
-                <div key={i} className="leading-relaxed" style={{ color: logColor(l.level) }}>
-                  {l.line}
-                </div>
+                <div key={i} className={clsx(
+                  "pl-3 border-l",
+                  l.level === 'error' ? "text-red-400 border-red-500/30" : 
+                  l.level === 'success' ? "text-green-400 border-green-500/30" : "text-white/40 border-white/10"
+                )}>{l.line}</div>
               ))
             )}
             <div ref={logsEndRef} />
+            <div ref={dmesgEndRef} />
+          </div>
+          
+          <div className="px-6 py-2 bg-white/[0.01] border-t border-white/5 flex justify-between items-center">
+             <div className="flex gap-4">
+               {buildResult?.success && (
+                 <>
+                   {!moduleLoaded ? (
+                     <button onClick={loadModule} className="text-[10px] font-bold text-cyan-400 hover:underline uppercase tracking-tighter">Load .ko</button>
+                   ) : (
+                     <button onClick={unloadModule} className="text-[10px] font-bold text-red-400 hover:underline uppercase tracking-tighter">Unload Module</button>
+                   )}
+                 </>
+               )}
+             </div>
+             <p className="text-[9px] font-bold text-white/10 uppercase">System Ready</p>
           </div>
         </div>
-
-        {/* Post-build actions */}
-        <AnimatePresence>
-          {buildResult && (
-            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              className="card p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                {buildResult.success
-                  ? <CheckCircle size={15} style={{ color: 'var(--green)' }} />
-                  : <AlertCircle size={15} style={{ color: 'var(--red)' }} />
-                }
-                <span className="text-sm font-semibold"
-                  style={{ color: buildResult.success ? 'var(--green)' : 'var(--red)' }}>
-                  {buildResult.success
-                    ? buildResult.loaded ? `✓ Loaded: ${modName}` : `✓ Built: ${modName}.ko`
-                    : `✗ Build failed`
-                  }
-                </span>
-                {buildResult.loaded && (
-                  <span className="badge badge-green text-[10px] ml-1">
-                    <Zap size={9} className="inline" /> Active in kernel
-                  </span>
-                )}
-              </div>
-
-              {buildResult.koFile && (
-                <p className="text-xs mono" style={{ color: 'var(--text3)' }}>
-                  {buildResult.koFile}
-                </p>
-              )}
-
-              {buildResult.success && (
-                <div className="flex gap-2 flex-wrap">
-                  <button onClick={loadModule} disabled={loadingAction}
-                    className="btn-primary flex items-center gap-2 text-sm">
-                    {loadingAction ? <RefreshCw size={13} className="animate-spin" /> : <Zap size={13} />}
-                    insmod — Load
-                  </button>
-                  
-                  <button onClick={unloadModule} disabled={loadingAction}
-                    className="btn-danger flex items-center gap-2 text-sm">
-                    {loadingAction ? <RefreshCw size={13} className="animate-spin" /> : <Square size={13} />}
-                    rmmod — Unload
-                  </button>
-
-                  <button onClick={() => checkModuleLoaded(modName)}
-                    className="btn-ghost flex items-center gap-2 text-sm">
-                    <RefreshCw size={13} /> Check Status
-                  </button>
-
-                  <button onClick={toggleDmesg}
-                    className="btn-ghost flex items-center gap-2 text-sm"
-                    style={watchingDmesg ? { color: 'var(--accent)', borderColor: 'rgba(34,211,238,0.3)' } : {}}>
-                    <Terminal size={13} />
-                    {watchingDmesg ? 'Stop dmesg' : 'Watch dmesg'}
-                  </button>
-                </div>
-              )}
-
-              {buildResult.success && (
-                <div className="px-3 py-2 rounded-lg text-xs" style={{ background: 'var(--surface)', color: 'var(--text3)' }}>
-                  💡 After loading, run <span className="mono" style={{ color: 'var(--accent)' }}>dmesg | tail -5</span> to see module output
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* dmesg live panel */}
-        <AnimatePresence>
-          {(watchingDmesg || dmesgLines.length > 0) && (
-            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              className="card flex flex-col flex-1" style={{ minHeight: 160, maxHeight: 260 }}>
-              <div className="terminal-header flex-shrink-0">
-                <span className="terminal-dot bg-red-400/60" />
-                <span className="terminal-dot bg-yellow-400/60" />
-                <span className="terminal-dot bg-green-400/60" />
-                <span className="text-xs ml-2 mono" style={{ color: 'var(--text3)' }}>dmesg -w</span>
-                {watchingDmesg && (
-                  <span className="ml-2 flex items-center gap-1 text-[10px]" style={{ color: 'var(--green)' }}>
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block" />
-                    live
-                  </span>
-                )}
-                <button onClick={toggleDmesg} className="ml-auto p-1 rounded"
-                  style={{ color: 'var(--text3)' }}>
-                  {watchingDmesg ? <Square size={11} /> : <X size={11} />}
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-3 mono text-xs space-y-px"
-                style={{ background: 'var(--code-bg)' }}>
-                {dmesgLines.length === 0 ? (
-                  <p style={{ color: 'var(--text3)' }}>Waiting for kernel messages...</p>
-                ) : (
-                  dmesgLines.map((line, i) => {
-                    const color = line.toLowerCase().includes('error') ? 'var(--red)'
-                                : line.toLowerCase().includes('warn')  ? 'var(--yellow)'
-                                : 'var(--green)'
-                    return <div key={i} style={{ color }}>{line}</div>
-                  })
-                )}
-                <div ref={dmesgEndRef} />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
       </div>
     </div>
   )
+}
+
+function Check(props) {
+  return <svg {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
 }

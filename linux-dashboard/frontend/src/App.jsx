@@ -6,14 +6,15 @@ import Process from './pages/Process'
 import Kernel from './pages/Kernel'
 import Sidebar from './components/Layout/Sidebar'
 import Header from './components/Layout/Header'
+import ErrorBoundary from './components/UI/ErrorBoundary'
 
 function MainLayout({ children }) {
   return (
-    <div className="flex h-screen" style={{ background: 'var(--bg)' }}>
+    <div className="flex h-screen bg-[#050608]">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
-        <main className="flex-1 overflow-auto" style={{ background: 'var(--bg)' }}>
+        <main className="flex-1 overflow-auto bg-[#050608]">
           {children}
         </main>
       </div>
@@ -21,47 +22,51 @@ function MainLayout({ children }) {
   )
 }
 
-export default function App() {
+function AppContent() {
   const { connect, disconnect } = useSocketStore()
 
   useEffect(() => {
-    // Connect to Socket.IO without token
     connect(null)
-
-    return () => {
-      disconnect()
-    }
+    return () => disconnect()
   }, [])
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route
-          path="/shell"
-          element={
-            <MainLayout>
-              <Shell />
-            </MainLayout>
-          }
-        />
-        <Route
-          path="/process"
-          element={
-            <MainLayout>
-              <Process />
-            </MainLayout>
-          }
-        />
-        <Route
-          path="/kernel"
-          element={
-            <MainLayout>
-              <Kernel />
-            </MainLayout>
-          }
-        />
-        <Route path="/" element={<Navigate to="/shell" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <Routes>
+      <Route
+        path="/shell"
+        element={
+          <MainLayout>
+            <Shell />
+          </MainLayout>
+        }
+      />
+      <Route
+        path="/process"
+        element={
+          <MainLayout>
+            <Process />
+          </MainLayout>
+        }
+      />
+      <Route
+        path="/kernel"
+        element={
+          <MainLayout>
+            <Kernel />
+          </MainLayout>
+        }
+      />
+      <Route path="/" element={<Navigate to="/shell" replace />} />
+    </Routes>
+  )
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AppContent />
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }
