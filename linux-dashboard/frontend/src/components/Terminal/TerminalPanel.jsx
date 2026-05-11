@@ -63,27 +63,45 @@ export default function TerminalPanel() {
       scrollback: 5000,
     })
 
-    xterm.loadAddon(fitRef.current)
-    xterm.open(termRef.current)
-    fitRef.current.fit()
-    xtermRef.current = xterm
+    const fitAddon = fitRef.current
+    xterm.loadAddon(fitAddon)
+    
+    // Safety flag for disposal
+    let isDisposed = false
 
-    const prompt = () => xterm.write('\r\n\x1b[1;32mroot@ubuntu\x1b[0m:\x1b[1;34m~\x1b[0m# ')
+    const prompt = () => {
+      if (!isDisposed) xterm.write('\x1b[1;32mroot@ubuntu\x1b[0m:\x1b[1;34m~\x1b[0m# ')
+    }
 
-    xterm.writeln('\x1b[1;36m┌──────────────────────────────────────────┐\x1b[0m')
-    xterm.writeln('\x1b[1;36m│\x1b[0m  \x1b[1;37mCYBERPUNK LINUX TERMINAL v2.0\x1b[0m           \x1b[1;36m│\x1b[0m')
-    xterm.writeln('\x1b[1;36m│\x1b[0m  \x1b[38;5;244mInteractive Shell Emulation Ready\x1b[0m       \x1b[1;36m│\x1b[0m')
-    xterm.writeln('\x1b[1;36m└──────────────────────────────────────────┘\x1b[0m')
-    xterm.write('\x1b[1;32mroot@ubuntu\x1b[0m:\x1b[1;34m~\x1b[0m# ')
+    // Only open if container is visible and has dimensions
+    const initTerminal = () => {
+      if (termRef.current && termRef.current.offsetParent && !xterm.element) {
+        xterm.open(termRef.current)
+        try {
+          fitAddon.fit()
+        } catch (e) {}
+        
+        xterm.writeln('\x1b[1;36m┌──────────────────────────────────────────┐\x1b[0m')
+        xterm.writeln('\x1b[1;36m│\x1b[0m  \x1b[1;37mCYBERPUNK LINUX TERMINAL v2.0\x1b[0m           \x1b[1;36m│\x1b[0m')
+        xterm.writeln('\x1b[1;36m│\x1b[0m  \x1b[38;5;244mInteractive Shell Emulation Ready\x1b[0m       \x1b[1;36m│\x1b[0m')
+        xterm.writeln('\x1b[1;36m└──────────────────────────────────────────┘\x1b[0m')
+        prompt()
+        xtermRef.current = xterm
+      }
+    }
+
+    // Initialize or wait for visibility
+    initTerminal()
+    const visibilityCheck = setInterval(initTerminal, 500)
 
     // Direct keyboard input handling
     xterm.onData(data => {
-      if (!connected) return
+      if (!connected || isDisposed) return
       
       if (data === '\r') { // Enter
         const command = inputBuffer.current.trim()
+        xterm.write('\r\n')
         if (command) {
-          xterm.write('\r\n')
           emit('terminal:execute', { command, id: Date.now() })
         } else {
           prompt()
@@ -101,17 +119,20 @@ export default function TerminalPanel() {
     })
 
     const onOutput = (data) => {
+      if (isDisposed) return
       xterm.write(data.data.replace(/\n/g, '\r\n'))
       if (data.data.endsWith('\n')) prompt()
     }
 
     const onError = (data) => {
-      xterm.write(`\r\n\x1b[31m[ERROR] ${data.error}\x1b[0m`)
+      if (isDisposed) return
+      xterm.write(`\r\n\x1b[31m[ERROR] ${data.error}\x1b[0m\r\n`)
       prompt()
     }
 
     const onClose = (data) => {
-      if (data.code !== 0) xterm.write(`\r\n\x1b[38;5;240m[process exited with code ${data.code}]\x1b[0m`)
+      if (isDisposed) return
+      if (data.code !== 0) xterm.write(`\r\n\x1b[38;5;240m[process exited with code ${data.code}]\x1b[0m\r\n`)
       prompt()
     }
 
@@ -119,15 +140,28 @@ export default function TerminalPanel() {
     on('terminal:error', onError)
     on('terminal:close', onClose)
 
-    const resize = () => fitRef.current.fit()
-    window.addEventListener('resize', resize)
+    // Resize handling using ResizeObserver for better accuracy
+    const resizeObserver = new ResizeObserver(() => {
+      if (!isDisposed && xterm.element && termRef.current?.offsetParent) {
+        try {
+          fitAddon.fit()
+        } catch (e) {}
+      }
+    })
+    
+    if (termRef.current) resizeObserver.observe(termRef.current)
 
     return () => {
+      isDisposed = true
+      clearInterval(visibilityCheck)
+      resizeObserver.disconnect()
       off('terminal:output')
       off('terminal:error')
       off('terminal:close')
-      window.removeEventListener('resize', resize)
-      xterm.dispose()
+      xtermRef.current = null
+      try {
+        xterm.dispose()
+      } catch (e) {}
     }
   }, [connected])
 
@@ -139,8 +173,10 @@ export default function TerminalPanel() {
   }
 
   const clear = () => {
-    xtermRef.current?.reset()
-    xtermRef.current?.write('\x1b[1;32mroot@ubuntu\x1b[0m:\x1b[1;34m~\x1b[0m# ')
+    if (xtermRef.current) {
+      xtermRef.current.reset()
+      xtermRef.current.write('\x1b[1;32mroot@ubuntu\x1b[0m:\x1b[1;34m~\x1b[0m# ')
+    }
     inputBuffer.current = ''
   }
 

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Zap, Shield, Trash2, Clock, 
   RefreshCw, CheckCircle, AlertCircle, 
-  Terminal, HardDrive, Package, Server, X
+  Terminal, HardDrive, Package, Server, X as CloseIcon
 } from 'lucide-react'
 import api from '../../utils/api'
 
@@ -158,7 +158,7 @@ export default function AutomationHub() {
                   {result.success ? <CheckCircle className="text-green-400" /> : <AlertCircle className="text-red-400" />}
                   <h3 className="text-sm font-bold uppercase tracking-widest">{result.title}</h3>
                 </div>
-                <button onClick={() => setResult(null)} className="text-white/20 hover:text-white"><X size={18} /></button>
+                <button onClick={() => setResult(null)} className="text-white/20 hover:text-white"><CloseIcon size={18} /></button>
               </div>
               
               <div className="bg-black/40 border border-white/5 rounded-xl p-4">
