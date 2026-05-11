@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Zap, Shield, Trash2, Clock, 
   RefreshCw, CheckCircle, AlertCircle, 
-  Terminal, HardDrive, Package, Server
+  Terminal, HardDrive, Package, Server, X
 } from 'lucide-react'
 import api from '../../utils/api'
 

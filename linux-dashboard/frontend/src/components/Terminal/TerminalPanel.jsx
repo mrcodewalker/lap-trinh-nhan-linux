@@ -183,14 +183,14 @@ export default function TerminalPanel() {
       </div>
 
       {/* Quick Commands Panel */}
-      <div className="flex items-center gap-2 px-4 py-2 bg-white/[0.02] border-b border-white/5 overflow-x-auto no-scrollbar">
-        <Zap size={12} className="text-yellow-400 flex-shrink-0" />
-        <span className="text-[10px] text-white/20 font-bold uppercase tracking-tighter whitespace-nowrap mr-2">Quick:</span>
+      <div className="flex items-center gap-2 px-4 py-1.5 bg-white/[0.02] border-b border-white/5 overflow-x-auto no-scrollbar">
+        <Zap size={10} className="text-yellow-400 flex-shrink-0" />
+        <span className="text-[9px] text-white/20 font-bold uppercase tracking-tighter whitespace-nowrap mr-1">Quick:</span>
         {QUICK_COMMANDS.map(q => (
           <button 
             key={q.label}
-            onClick={() => runCommand(q.cmd)}
-            className="px-2 py-1 rounded-md bg-white/5 border border-white/5 hover:border-cyan-500/30 hover:bg-cyan-500/10 text-[10px] text-white/40 hover:text-cyan-400 transition-all whitespace-nowrap"
+            onClick={() => setCmd(q.cmd)}
+            className="px-1.5 py-0.5 rounded-md bg-white/5 border border-white/5 hover:border-cyan-500/30 hover:bg-cyan-500/10 text-[9px] text-white/30 hover:text-cyan-400 transition-all whitespace-nowrap"
           >
             {q.label}
           </button>

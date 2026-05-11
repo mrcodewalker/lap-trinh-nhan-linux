@@ -119,24 +119,60 @@ router.post('/kill', (req, res) => {
   }
 });
 
+// POST /api/process/execute - Execute a command and get output
+router.post('/execute', (req, res) => {
+  try {
+    const { command } = req.body;
+    if (!command) return res.status(400).json({ error: 'Command required' });
+
+    logger.info(`Executing automation: ${command}`);
+    const proc = spawn('bash', ['-c', command]);
+    let output = '';
+    let error = '';
+
+    proc.stdout.on('data', (d) => output += d.toString());
+    proc.stderr.on('data', (d) => error += d.toString());
+
+    proc.on('close', (code) => {
+      if (res.headersSent) return;
+      res.json({ 
+        success: code === 0, 
+        message: code === 0 ? 'Success' : 'Failed',
+        output: output || error || (code === 0 ? 'Command completed' : 'Command failed with code ' + code)
+      });
+    });
+
+    proc.on('error', (err) => {
+      if (!res.headersSent) res.status(500).json({ error: err.message });
+    });
+
+    // Timeout after 30s
+    setTimeout(() => {
+      if (!res.headersSent) {
+        proc.kill();
+        res.status(504).json({ error: 'Execution timed out' });
+      }
+    }, 30000);
+
+  } catch (err) {
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/process/start - Start a new process
 router.post('/start', (req, res) => {
   try {
     const { command } = req.body;
-
-    if (!command) {
-      return res.status(400).json({ error: 'Command required' });
-    }
+    if (!command) return res.status(400).json({ error: 'Command required' });
 
     logger.info(`Starting process: ${command}`);
-
     const parts = command.split(' ');
     const proc = spawn(parts[0], parts.slice(1), { detached: true, stdio: 'ignore' });
     proc.unref();
 
     res.json({ message: `Process started: ${command}`, pid: proc.pid });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
