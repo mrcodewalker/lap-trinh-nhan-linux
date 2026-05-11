@@ -121,7 +121,6 @@ export default function TerminalPanel() {
     const onOutput = (data) => {
       if (isDisposed) return
       xterm.write(data.data.replace(/\n/g, '\r\n'))
-      if (data.data.endsWith('\n')) prompt()
     }
 
     const onError = (data) => {
@@ -132,7 +131,11 @@ export default function TerminalPanel() {
 
     const onClose = (data) => {
       if (isDisposed) return
-      if (data.code !== 0) xterm.write(`\r\n\x1b[38;5;240m[process exited with code ${data.code}]\x1b[0m\r\n`)
+      if (data.code !== 0) {
+        xterm.write(`\r\n\x1b[38;5;240m[process exited with code ${data.code}]\x1b[0m\r\n`)
+      } else {
+        xterm.write('\r\n')
+      }
       prompt()
     }
 

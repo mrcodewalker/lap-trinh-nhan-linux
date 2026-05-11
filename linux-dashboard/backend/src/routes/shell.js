@@ -191,21 +191,40 @@ router.post('/files/chmod', (req, res) => {
   }
 });
 
+// POST /api/shell/scripts/save - Save a script for cron/automation
+router.post('/scripts/save', async (req, res) => {
+  try {
+    const { name, content } = req.body;
+    if (!content) return res.status(400).json({ error: 'Content required' });
+
+    const scriptsDir = path.join(USER_HOME, '.dashboard_scripts');
+    try {
+      await fs.mkdir(scriptsDir, { recursive: true });
+    } catch (e) {}
+
+    const filename = name || `script_${Date.now()}.sh`;
+    const fullPath = path.join(scriptsDir, filename);
+
+    await fs.writeFile(fullPath, content, 'utf-8');
+    await fs.chmod(fullPath, 0o755); // Make executable
+
+    res.json({ message: 'Script saved', path: fullPath, filename });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/shell/files/mkdir - Create directory
 router.post('/files/mkdir', async (req, res) => {
   try {
     const { dir } = req.body;
-
-    if (!dir || dir.includes('..')) {
-      return res.status(403).json({ error: 'Invalid directory path' });
-    }
+    if (!dir || dir.includes('..')) return res.status(403).json({ error: 'Invalid directory path' });
 
     await fs.mkdir(dir, { recursive: true });
     logger.info(`Directory created: ${dir}`);
-
-    res.json({ message: 'Directory created successfully' });
+    res.json({ message: 'Directory created successfully', dir });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 

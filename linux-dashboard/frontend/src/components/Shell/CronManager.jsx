@@ -20,7 +20,10 @@ export default function CronManager() {
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState(null)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm]         = useState({ minute:'*', hour:'*', dayOfMonth:'*', month:'*', dayOfWeek:'*', command:'' })
+  const [form, setForm]         = useState({ 
+    minute:'*', hour:'*', dayOfMonth:'*', month:'*', dayOfWeek:'*', 
+    command:'', mode: 'cmd', scriptContent: '' 
+  })
   const [saving, setSaving]     = useState(false)
 
   useEffect(() => { loadJobs() }, [])
@@ -42,11 +45,36 @@ export default function CronManager() {
 
   const addJob = async (e) => {
     e.preventDefault()
-    if (!form.command.trim()) { setError('Command is required'); return }
+    
+    let finalCommand = form.command
+    
+    if (form.mode === 'script') {
+      if (!form.scriptContent.trim()) { setError('Script content is required'); return }
+      setSaving(true)
+      try {
+        const scriptName = `cron_${Date.now()}.sh`
+        const r = await api.post('/shell/scripts/save', { 
+          name: scriptName, 
+          content: form.scriptContent 
+        })
+        finalCommand = `bash ${r.data.path}`
+      } catch (e) {
+        setError('Failed to save script: ' + (e.response?.data?.error || e.message))
+        setSaving(false)
+        return
+      }
+    } else if (!finalCommand.trim()) {
+      setError('Command is required')
+      return
+    }
+
     setSaving(true)
     try {
-      await api.post('/shell/cron/add', form)
-      setForm({ minute:'*', hour:'*', dayOfMonth:'*', month:'*', dayOfWeek:'*', command:'' })
+      await api.post('/shell/cron/add', { ...form, command: finalCommand })
+      setForm({ 
+        minute:'*', hour:'*', dayOfMonth:'*', month:'*', dayOfWeek:'*', 
+        command:'', mode: 'cmd', scriptContent: '' 
+      })
       setShowForm(false)
       loadJobs()
     } catch (e) {
@@ -97,7 +125,7 @@ export default function CronManager() {
             initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
             className="card p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>New Cron Job</p>
+              <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>New Scheduled Task</p>
               <button type="button" onClick={() => setShowForm(false)}>
                 <X size={15} style={{ color: 'var(--text3)' }} />
               </button>
@@ -127,17 +155,53 @@ export default function CronManager() {
               ))}
             </div>
 
-            {/* Command */}
-            <div>
-              <label className="text-xs block mb-1" style={{ color: 'var(--text3)' }}>Command</label>
-              <input value={form.command} onChange={e => setForm(f => ({ ...f, command: e.target.value }))}
-                className="input mono" placeholder="/usr/bin/backup.sh" />
+            {/* Command / Script Selector */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs block" style={{ color: 'var(--text3)' }}>Task Execution</label>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setForm(f => ({ ...f, mode: 'cmd' }))}
+                    className={clsx("text-[10px] font-bold px-2 py-0.5 rounded transition-all", form.mode === 'cmd' ? "bg-cyan-500 text-black" : "bg-white/5 text-white/30")}>
+                    SINGLE COMMAND
+                  </button>
+                  <button type="button" onClick={() => setForm(f => ({ ...f, mode: 'script' }))}
+                    className={clsx("text-[10px] font-bold px-2 py-0.5 rounded transition-all", form.mode === 'script' ? "bg-cyan-500 text-black" : "bg-white/5 text-white/30")}>
+                    SHELL SCRIPT
+                  </button>
+                </div>
+              </div>
+
+              {form.mode === 'script' ? (
+                <div className="space-y-2">
+                  <div className="terminal-wrap" style={{ height: '200px' }}>
+                    <div className="terminal-header">
+                      <div className="flex gap-1">
+                        <span className="w-2 h-2 rounded-full bg-red-500/40" />
+                        <span className="w-2 h-2 rounded-full bg-yellow-500/40" />
+                        <span className="w-2 h-2 rounded-full bg-green-500/40" />
+                      </div>
+                      <span className="text-[10px] ml-2 text-white/20 mono">script_editor.sh</span>
+                    </div>
+                    <textarea 
+                      value={form.scriptContent || '#!/bin/bash\n\necho "Current time: $(date)"\n# Add your multi-line shell script here'} 
+                      onChange={e => setForm(f => ({ ...f, scriptContent: e.target.value }))}
+                      className="w-full h-[160px] bg-[#0a0b10] p-4 text-xs mono text-cyan-400 outline-none resize-none leading-relaxed"
+                    />
+                  </div>
+                  <p className="text-[10px] text-white/20 italic">Note: The script will be saved and scheduled automatically.</p>
+                </div>
+              ) : (
+                <input value={form.command} onChange={e => setForm(f => ({ ...f, command: e.target.value }))}
+                  className="input mono" placeholder="e.g. /usr/bin/python3 /path/to/app.py" />
+              )}
             </div>
 
             {/* Preview */}
             <div className="code-block text-xs">
               <span style={{ color: 'var(--text3)' }}>Preview: </span>
-              <span style={{ color: 'var(--accent)' }}>{cronPreview}</span>
+              <span style={{ color: 'var(--accent)' }}>
+                {form.minute} {form.hour} {form.dayOfMonth} {form.month} {form.dayOfWeek} {form.mode === 'script' ? 'bash [generated_script].sh' : (form.command || '[command]')}
+              </span>
             </div>
 
             <div className="flex gap-2 justify-end">
@@ -145,7 +209,7 @@ export default function CronManager() {
               <button type="submit" disabled={saving}
                 className="btn-primary flex items-center gap-1.5 disabled:opacity-40">
                 {saving ? <RefreshCw size={13} className="animate-spin" /> : <Check size={13} />}
-                Add Job
+                Schedule Task
               </button>
             </div>
           </motion.form>
