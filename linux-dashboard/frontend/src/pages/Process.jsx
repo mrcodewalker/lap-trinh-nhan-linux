@@ -1,18 +1,20 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/UI/Tabs'
-import { Activity, BarChart2, Network, Wifi, ScrollText } from 'lucide-react'
+import { Activity, BarChart2, Network, Wifi, ScrollText, Bug } from 'lucide-react'
 import ProcessManager from '../components/Process/ProcessManager'
 import ResourceMonitor from '../components/Process/ResourceMonitor'
 import SocketMonitor from '../components/Process/SocketMonitor'
 import NetworkTools from '../components/Process/NetworkTools'
 import SystemLogs from '../components/Process/SystemLogs'
+import StraceTracer from '../components/Process/StraceTracer'
 
 const TABS = [
   { value: 'processes', label: 'Processes',  icon: Activity },
   { value: 'resources', label: 'Resources',  icon: BarChart2 },
   { value: 'sockets',   label: 'Sockets',    icon: Network },
   { value: 'network',   label: 'Net Tools',  icon: Wifi },
+  { value: 'strace',    label: 'Strace',     icon: Bug },
   { value: 'logs',      label: 'Sys Logs',   icon: ScrollText },
 ]
 
@@ -43,6 +45,7 @@ export default function Process() {
           <TabsContent value="resources"><ResourceMonitor /></TabsContent>
           <TabsContent value="sockets"><SocketMonitor /></TabsContent>
           <TabsContent value="network"><NetworkTools /></TabsContent>
+          <TabsContent value="strace"><StraceTracer /></TabsContent>
           <TabsContent value="logs"><SystemLogs /></TabsContent>
         </div>
       </Tabs>

@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { CalendarClock, Plus, Trash2, RefreshCw, X, Check, Clock, AlertCircle, Terminal, Play } from 'lucide-react'
 import api from '../../utils/api'
 import { clsx } from 'clsx'
+import ExplainPanel from '../Explain/ExplainPanel'
+import ActivityLog from '../ActivityLog/ActivityLog'
 
 const PRESETS = [
   { label: 'Every minute',    value: '* * * * *' },
@@ -222,6 +224,7 @@ export default function CronManager() {
           <button onClick={loadJobs} className="btn-ghost p-2 rounded-lg bg-white/5">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
+          <ExplainPanel concept="cron" label="cron" />
           <button onClick={fetchLogs} className="btn-ghost flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white/5 hover:bg-cyan-500/10 transition-all border border-white/5">
             <Terminal size={14} /> View Logs
           </button>
@@ -399,6 +402,9 @@ export default function CronManager() {
           </div>
         )}
       </div>
+
+      {/* Realtime activity log: cron add/remove/run thật */}
+      <ActivityLog scope="cron" title="Cron operations · live commands" height={200} />
     </div>
   )
 }

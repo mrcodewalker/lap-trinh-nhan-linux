@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import api from '../../utils/api'
 import { useSocketStore } from '../../store/socketStore'
+import ActivityLog from '../ActivityLog/ActivityLog'
 
 // ── Inline templates (fallback if server samples unavailable) ──────────────
 const BUILTIN = {
@@ -587,6 +588,9 @@ export default function KernelBuilder() {
         </AnimatePresence>
 
       </div>
+
+      {/* Realtime activity log: build / insmod / rmmod commands */}
+      <ActivityLog scope="kernel" title="Kernel build & load · live commands" height={200} className="mt-4" />
     </div>
   )
 }

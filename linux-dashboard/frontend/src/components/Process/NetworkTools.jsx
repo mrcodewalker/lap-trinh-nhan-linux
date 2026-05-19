@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import api from '../../utils/api'
 import { clsx } from 'clsx'
+import ActivityLog from '../ActivityLog/ActivityLog'
 
 const TOOLS = [
   { id: 'ping',       label: 'Visual Ping',    icon: Wifi,   placeholder: 'google.com', desc: 'Real-time latency graph' },
@@ -240,6 +241,9 @@ export default function NetworkTools() {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Realtime activity log: ping / traceroute / dig commands thật */}
+      <ActivityLog scope="network" title="Network tools · live commands" height={200} className="mt-4" />
     </div>
   )
 }

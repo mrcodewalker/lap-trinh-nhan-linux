@@ -6,6 +6,7 @@ const express = require('express');
 const { spawn } = require('child_process');
 const os = require('os');
 const logger = require('../utils/logger');
+const activity = require('../utils/activity');
 
 const router = express.Router();
 
@@ -112,6 +113,7 @@ router.post('/kill', (req, res) => {
 
     logger.info(`Killing process ${pid} with signal ${signal}`);
     process.kill(parseInt(pid), signal);
+    activity.log({ scope: 'process', command: `kill -${signal} ${pid}`, code: 0 });
 
     res.json({ message: `Process ${pid} killed with signal ${signal}` });
   } catch (err) {
@@ -135,6 +137,7 @@ router.post('/execute', (req, res) => {
 
     proc.on('close', (code) => {
       if (res.headersSent) return;
+      activity.log({ scope: 'process', command: `bash -c "${command}"`, code, output: (output || error).slice(0, 800) });
       res.json({ 
         success: code === 0, 
         message: code === 0 ? 'Success' : 'Failed',
@@ -169,6 +172,7 @@ router.post('/start', (req, res) => {
     const parts = command.split(' ');
     const proc = spawn(parts[0], parts.slice(1), { detached: true, stdio: 'ignore' });
     proc.unref();
+    activity.log({ scope: 'process', command: `nohup ${command} & disown`, code: 0, meta: { pid: proc.pid } });
 
     res.json({ message: `Process started: ${command}`, pid: proc.pid });
   } catch (err) {
@@ -398,6 +402,7 @@ router.post('/network/ping', (req, res) => {
     });
 
     ping.on('close', (code) => {
+      activity.log({ scope: 'network', command: `ping -c ${count} ${host}`, code, output: output.slice(0, 600) });
       if (!res.headersSent) res.json({ result: output, success: code === 0 });
     });
 
@@ -426,6 +431,7 @@ router.post('/network/traceroute', (req, res) => {
     tr.stderr.on('data', (data) => { output += data.toString(); });
 
     tr.on('close', (code) => {
+      activity.log({ scope: 'network', command: `traceroute -m 30 ${host}`, code, output: output.slice(0, 600) });
       if (!res.headersSent) res.json({ result: output, success: code === 0 });
     });
 
@@ -454,6 +460,7 @@ router.post('/network/dns', (req, res) => {
     dig.stderr.on('data', (data) => { output += data.toString(); });
 
     dig.on('close', (code) => {
+      activity.log({ scope: 'network', command: `dig ${host}`, code, output: output.slice(0, 600) });
       if (!res.headersSent) res.json({ result: output, success: code === 0 });
     });
 

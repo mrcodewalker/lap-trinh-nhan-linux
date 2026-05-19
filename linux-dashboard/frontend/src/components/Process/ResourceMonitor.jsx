@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import api from '../../utils/api'
+import ActivityLog from '../ActivityLog/ActivityLog'
 
 const fmt = (bytes) => {
   const gb = bytes / (1024 ** 3)
@@ -142,6 +143,9 @@ export default function ResourceMonitor() {
           })}
         </div>
       </div>
+
+      {/* Realtime activity from system scope */}
+      <ActivityLog scope="system" title="System resource sampler · live" height={180} />
     </div>
   )
 }

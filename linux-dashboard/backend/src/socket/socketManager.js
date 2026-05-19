@@ -5,6 +5,10 @@ const { spawn } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('../utils/logger');
+const activity = require('../utils/activity');
+
+const { attachDemoSocket }   = require('../routes/demo');
+const { attachStraceSocket } = require('../routes/strace');
 
 const activeSessions = new Map();
 
@@ -17,17 +21,26 @@ function initSocketHandlers(io) {
     activeSessions.set(socket.id, { connectedAt: new Date() });
     io.emit('sessions:update', { activeCount: activeSessions.size });
 
+    // Demo & strace handlers (modular)
+    attachDemoSocket(socket);
+    attachStraceSocket(socket);
+
     // ── TERMINAL ──────────────────────────────────────────────
     socket.on('terminal:execute', (data) => {
       const { command, id } = data;
       logger.info(`Executing: ${command}`);
       try {
         const proc = spawn('bash', ['-c', command]);
-        proc.stdout.on('data', (d) => socket.emit('terminal:output', { id, data: d.toString() }));
-        proc.stderr.on('data', (d) => socket.emit('terminal:error',  { id, error: d.toString() }));
-        proc.on('close', (code) => socket.emit('terminal:close', { id, code }));
+        let bufOut = '';
+        proc.stdout.on('data', (d) => { bufOut += d.toString(); socket.emit('terminal:output', { id, data: d.toString() }); });
+        proc.stderr.on('data', (d) => { bufOut += d.toString(); socket.emit('terminal:error',  { id, error: d.toString() }); });
+        proc.on('close', (code) => {
+          activity.log({ scope: 'terminal', command, code, output: bufOut.slice(0, 800) });
+          socket.emit('terminal:close', { id, code });
+        });
         proc.on('error', (err) => {
           logger.error(`Terminal spawn error: ${err.message}`);
+          activity.log({ scope: 'terminal', command, code: -1, level: 'error', output: err.message });
           socket.emit('terminal:error', { id, error: `Failed to start terminal: ${err.message}` });
         });
         setTimeout(() => {
@@ -81,10 +94,12 @@ function initSocketHandlers(io) {
 
         make.on('close', async (exitCode) => {
           if (exitCode !== 0) {
+            activity.log({ scope: 'kernel', command: `make -C ${moduleDir}`, code: exitCode, output: (buildError || buildOutput).slice(0, 800), level: 'error' });
             kEmit('done', { success: false, error: 'Build failed', buildOutput, buildError });
             return;
           }
           const koFile = path.join(moduleDir, `${moduleName}.ko`);
+          activity.log({ scope: 'kernel', command: `make -C ${moduleDir}`, code: 0, output: `built ${moduleName}.ko` });
           kEmit('log', { line: `[ok] Built: ${koFile}`, level: 'success' });
 
           if (!autoLoad) {
@@ -97,6 +112,7 @@ function initSocketHandlers(io) {
           let insmodErr = '';
           insmod.stderr.on('data', (d) => { insmodErr += d.toString(); });
           insmod.on('close', (lc) => {
+            activity.log({ scope: 'kernel', command: `sudo insmod ${koFile}`, code: lc, output: insmodErr });
             if (lc === 0) {
               kEmit('log', { line: '[ok] Module loaded! Check dmesg for output.', level: 'success' });
               kEmit('done', { success: true, koFile, loaded: true });
@@ -218,12 +234,19 @@ function initSocketHandlers(io) {
     socket.on('packages:install', (data) => {
       const { name, id } = data;
       logger.info(`Socket Install: ${name}`);
+      const cmd = `sudo apt-get install -y ${name}`;
+      activity.log({ scope: 'packages', command: cmd, code: null, level: 'info', output: '[start]' });
       try {
         const apt = spawn('sudo', ['-n', 'apt-get', 'install', '-y', name]);
-        apt.stdout.on('data', (d) => socket.emit('packages:output', { id, data: d.toString() }));
-        apt.stderr.on('data', (d) => socket.emit('packages:output', { id, data: d.toString() }));
-        apt.on('close', (code) => socket.emit('packages:close', { id, code }));
+        let buf = '';
+        apt.stdout.on('data', (d) => { buf += d.toString(); socket.emit('packages:output', { id, data: d.toString() }); });
+        apt.stderr.on('data', (d) => { buf += d.toString(); socket.emit('packages:output', { id, data: d.toString() }); });
+        apt.on('close', (code) => {
+          activity.log({ scope: 'packages', command: cmd, code, output: buf.slice(-800) });
+          socket.emit('packages:close', { id, code });
+        });
         apt.on('error', (err) => {
+          activity.log({ scope: 'packages', command: cmd, code: -1, level: 'error', output: err.message });
           socket.emit('packages:output', { id, data: `Error: ${err.message}\n` });
           socket.emit('packages:close', { id, code: 1 });
         });
@@ -236,12 +259,19 @@ function initSocketHandlers(io) {
     socket.on('packages:remove', (data) => {
       const { name, id } = data;
       logger.info(`Socket Remove: ${name}`);
+      const cmd = `sudo apt-get remove -y ${name}`;
+      activity.log({ scope: 'packages', command: cmd, code: null, level: 'info', output: '[start]' });
       try {
         const apt = spawn('sudo', ['-n', 'apt-get', 'remove', '-y', name]);
-        apt.stdout.on('data', (d) => socket.emit('packages:output', { id, data: d.toString() }));
-        apt.stderr.on('data', (d) => socket.emit('packages:output', { id, data: d.toString() }));
-        apt.on('close', (code) => socket.emit('packages:close', { id, code }));
+        let buf = '';
+        apt.stdout.on('data', (d) => { buf += d.toString(); socket.emit('packages:output', { id, data: d.toString() }); });
+        apt.stderr.on('data', (d) => { buf += d.toString(); socket.emit('packages:output', { id, data: d.toString() }); });
+        apt.on('close', (code) => {
+          activity.log({ scope: 'packages', command: cmd, code, output: buf.slice(-800) });
+          socket.emit('packages:close', { id, code });
+        });
         apt.on('error', (err) => {
+          activity.log({ scope: 'packages', command: cmd, code: -1, level: 'error', output: err.message });
           socket.emit('packages:output', { id, data: `Error: ${err.message}\n` });
           socket.emit('packages:close', { id, code: 1 });
         });

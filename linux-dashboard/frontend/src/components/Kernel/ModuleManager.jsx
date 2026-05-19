@@ -6,6 +6,8 @@ import {
 } from 'lucide-react'
 import api from '../../utils/api'
 import { clsx } from 'clsx'
+import ExplainPanel from '../Explain/ExplainPanel'
+import ActivityLog from '../ActivityLog/ActivityLog'
 
 export default function ModuleManager() {
   const [modules, setModules]       = useState([])
@@ -152,6 +154,9 @@ export default function ModuleManager() {
             <button onClick={loadModules} className="p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             </button>
+            <ExplainPanel concept="insmod" label="insmod" />
+            <ExplainPanel concept="rmmod"  label="rmmod" />
+            <ExplainPanel concept="printk" label="printk" />
           </div>
 
       {/* Op result banner */}
@@ -481,6 +486,8 @@ export default function ModuleManager() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ActivityLog scope="kernel" title="Kernel module actions · insmod/rmmod/build" height={200} />
     </div>
   )
 }

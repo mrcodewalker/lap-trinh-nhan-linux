@@ -8,6 +8,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const multer = require('multer');
 const logger = require('../utils/logger');
+const activity = require('../utils/activity');
 
 const router = express.Router();
 
@@ -113,6 +114,7 @@ router.post('/insmod', (req, res) => {
     });
 
     insmod.on('close', (code) => {
+      activity.log({ scope: 'kernel', command: `sudo insmod ${args.join(' ')}`, code, output: error });
       if (code === 0) {
         res.json({ message: 'Module loaded successfully' });
       } else {
@@ -148,6 +150,7 @@ router.post('/rmmod', (req, res) => {
     });
 
     rmmod.on('close', (code) => {
+      activity.log({ scope: 'kernel', command: `sudo rmmod ${module}`, code, output: error });
       if (code === 0) {
         res.json({ message: 'Module unloaded successfully' });
       } else {

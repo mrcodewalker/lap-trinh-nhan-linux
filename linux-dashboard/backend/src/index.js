@@ -18,6 +18,8 @@ const logger = require('./utils/logger');
 const shellRoutes = require('./routes/shell');
 const processRoutes = require('./routes/process');
 const kernelRoutes = require('./routes/kernel');
+const demoRoutes = require('./routes/demo');
+const straceRoutes = require('./routes/strace');
 
 // Socket handlers
 const { initSocketHandlers } = require('./socket/socketManager');
@@ -53,6 +55,8 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use('/api/shell', shellRoutes);
 app.use('/api/process', processRoutes);
 app.use('/api/kernel', kernelRoutes);
+app.use('/api/demo', demoRoutes);
+app.use('/api/strace', straceRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -60,7 +64,7 @@ app.get('/api/health', (req, res) => {
     status: 'online',
     timestamp: new Date().toISOString(),
     version: '2.0.0',
-    modules: ['shell', 'process', 'kernel']
+    modules: ['shell', 'process', 'kernel', 'demo', 'strace']
   });
 });
 
@@ -76,11 +80,14 @@ app.use((err, req, res, next) => {
 // Initialize Socket.IO handlers
 initSocketHandlers(io);
 
+// Activity bus — broadcast các command thật đã thực thi tới mọi client
+require('./utils/activity').attachIO(io);
+
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   logger.info(`🚀 Linux Dashboard Backend running on port ${PORT}`);
   logger.info(`🔌 Socket.IO ready`);
-  logger.info(`📦 Modules: Shell | Process | Kernel`);
+  logger.info(`📦 Modules: Shell | Process | Kernel | Demo | Strace`);
   logger.info(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 

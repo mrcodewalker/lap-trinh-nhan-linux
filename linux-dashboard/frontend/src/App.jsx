@@ -4,6 +4,8 @@ import { useSocketStore } from './store/socketStore'
 import Shell from './pages/Shell'
 import Process from './pages/Process'
 import Kernel from './pages/Kernel'
+import Demo from './pages/Demo'
+import Activity from './pages/Activity'
 import Sidebar from './components/Layout/Sidebar'
 import Header from './components/Layout/Header'
 
@@ -57,6 +59,22 @@ export default function App() {
           element={
             <MainLayout>
               <Kernel />
+            </MainLayout>
+          }
+        />
+        <Route
+          path="/demo"
+          element={
+            <MainLayout>
+              <Demo />
+            </MainLayout>
+          }
+        />
+        <Route
+          path="/activity"
+          element={
+            <MainLayout>
+              <Activity />
             </MainLayout>
           }
         />
