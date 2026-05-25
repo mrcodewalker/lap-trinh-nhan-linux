@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   RefreshCw, Trash2, Search, Info, X, AlertTriangle,
   Zap, ChevronDown, ChevronUp, Activity, Cpu, Clock, User, Terminal
 } from 'lucide-react'
 import api from '../../utils/api'
-import ExplainPanel from '../Explain/ExplainPanel'
-import ActivityLog from '../ActivityLog/ActivityLog'
 
 const SIGNALS = [
   { name: 'SIGTERM', desc: 'Graceful terminate', color: '#f59e0b' },
@@ -220,148 +219,148 @@ export default function ProcessManager() {
         )}
       </div>
 
-      {/* Modals */}
-      <AnimatePresence>
-        {modal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="modal-backdrop" onClick={() => setModal(null)}>
-            <motion.div initial={{ scale: 0.94, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.94 }}
-              className="modal-box max-w-lg" onClick={e => e.stopPropagation()}>
+      {/* Modals - rendered via Portal to escape overflow:auto clipping */}
+      {createPortal(
+        <AnimatePresence>
+          {modal && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="modal-backdrop" onClick={() => setModal(null)}>
+              <motion.div initial={{ scale: 0.94, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.94 }}
+                className="modal-box max-w-lg" onClick={e => e.stopPropagation()}>
 
-              {/* Process Info */}
-              {modal.type === 'info' && (
-                <>
-                  <div className="flex items-center justify-between mb-5">
-                    <div className="flex items-center gap-3">
+                {/* Process Info */}
+                {modal.type === 'info' && (
+                  <>
+                    <div className="flex items-center justify-between mb-5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+                          style={{ background: 'rgba(6,182,212,0.12)', border: '1px solid rgba(6,182,212,0.2)' }}>
+                          <Terminal size={16} style={{ color: 'var(--accent)' }} />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>Process {modal.data.pid}</p>
+                          <p className="text-xs font-mono truncate max-w-[260px]" style={{ color: 'var(--text3)' }}>
+                            {modal.data.command}
+                          </p>
+                        </div>
+                      </div>
+                      <button onClick={() => setModal(null)}><X size={16} style={{ color: 'var(--text3)' }} /></button>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 mb-4">
+                      {[
+                        { icon: Cpu, label: 'CPU', value: modal.data.cpu + '%', color: cpuColor(modal.data.cpu) },
+                        { icon: Activity, label: 'MEM', value: modal.data.mem + '%', color: 'var(--accent2)' },
+                        { icon: User, label: 'User', value: modal.data.user, color: 'var(--accent)' },
+                        { icon: Activity, label: 'State', value: modal.data.stat, color: 'var(--green)' },
+                        { icon: Clock, label: 'Start', value: modal.data.start, color: 'var(--yellow)' },
+                        { icon: Clock, label: 'Time', value: modal.data.time, color: 'var(--pink)' },
+                      ].map(({ icon: Icon, label, value, color }) => (
+                        <div key={label} className="card p-3">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Icon size={11} style={{ color }} />
+                            <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text3)' }}>{label}</span>
+                          </div>
+                          <p className="text-sm font-mono font-semibold" style={{ color }}>{value}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <p className="text-[10px] uppercase tracking-wider mb-2" style={{ color: 'var(--text3)' }}>
+                      /proc/{modal.data.pid}/status
+                    </p>
+                    <pre className="code-block text-xs max-h-52 overflow-auto">{procInfo}</pre>
+
+                    <div className="flex gap-2 mt-4">
+                      <button onClick={() => setModal({ type: 'kill', data: modal.data })}
+                        className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold"
+                        style={{ color: 'var(--red)', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
+                        <Zap size={13} /> Send Signal
+                      </button>
+                      <button onClick={() => setModal(null)} className="btn-ghost flex-1 text-xs">Close</button>
+                    </div>
+                  </>
+                )}
+
+                {/* Kill / Signal */}
+                {modal.type === 'kill' && (
+                  <>
+                    <div className="flex items-center gap-3 mb-5">
                       <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-                        style={{ background: 'rgba(6,182,212,0.12)', border: '1px solid rgba(6,182,212,0.2)' }}>
-                        <Terminal size={16} style={{ color: 'var(--accent)' }} />
+                        style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                        <AlertTriangle size={16} style={{ color: 'var(--red)' }} />
                       </div>
                       <div>
-                        <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>Process {modal.data.pid}</p>
+                        <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
+                          Send Signal to PID {modal.data.pid}
+                        </p>
                         <p className="text-xs font-mono truncate max-w-[260px]" style={{ color: 'var(--text3)' }}>
                           {modal.data.command}
                         </p>
                       </div>
-                    </div>
-                    <button onClick={() => setModal(null)}><X size={16} style={{ color: 'var(--text3)' }} /></button>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 mb-4">
-                    {[
-                      { icon: Cpu, label: 'CPU', value: modal.data.cpu + '%', color: cpuColor(modal.data.cpu) },
-                      { icon: Activity, label: 'MEM', value: modal.data.mem + '%', color: 'var(--accent2)' },
-                      { icon: User, label: 'User', value: modal.data.user, color: 'var(--accent)' },
-                      { icon: Activity, label: 'State', value: modal.data.stat, color: 'var(--green)' },
-                      { icon: Clock, label: 'Start', value: modal.data.start, color: 'var(--yellow)' },
-                      { icon: Clock, label: 'Time', value: modal.data.time, color: 'var(--pink)' },
-                    ].map(({ icon: Icon, label, value, color }) => (
-                      <div key={label} className="card p-3">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <Icon size={11} style={{ color }} />
-                          <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text3)' }}>{label}</span>
-                        </div>
-                        <p className="text-sm font-mono font-semibold" style={{ color }}>{value}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <p className="text-[10px] uppercase tracking-wider mb-2" style={{ color: 'var(--text3)' }}>
-                    /proc/{modal.data.pid}/status
-                  </p>
-                  <pre className="code-block text-xs max-h-52 overflow-auto">{procInfo}</pre>
-
-                  <div className="flex gap-2 mt-4">
-                    <button onClick={() => setModal({ type: 'kill', data: modal.data })}
-                      className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold"
-                      style={{ color: 'var(--red)', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
-                      <Zap size={13} /> Send Signal
-                    </button>
-                    <button onClick={() => setModal(null)} className="btn-ghost flex-1 text-xs">Close</button>
-                  </div>
-                </>
-              )}
-
-              {/* Kill / Signal */}
-              {modal.type === 'kill' && (
-                <>
-                  <div className="flex items-center gap-3 mb-5">
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-                      style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.2)' }}>
-                      <AlertTriangle size={16} style={{ color: 'var(--red)' }} />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
-                        Send Signal to PID {modal.data.pid}
-                      </p>
-                      <p className="text-xs font-mono truncate max-w-[260px]" style={{ color: 'var(--text3)' }}>
-                        {modal.data.command}
-                      </p>
-                    </div>
-                    <button onClick={() => setModal(null)} className="ml-auto">
-                      <X size={16} style={{ color: 'var(--text3)' }} />
-                    </button>
-                  </div>
-
-                  <p className="text-xs mb-3" style={{ color: 'var(--text3)' }}>Choose signal:</p>
-                  <div className="grid grid-cols-2 gap-2 mb-5">
-                    {SIGNALS.map(s => (
-                      <button key={s.name} onClick={() => setSignal(s.name)}
-                        className="flex items-center gap-3 p-3 rounded-xl text-left transition-all"
-                        style={signal === s.name ? {
-                          borderColor: s.color + '50',
-                          border: `1px solid ${s.color}50`,
-                          background: s.color + '10',
-                        } : {
-                          border: '1px solid var(--border)',
-                        }}>
-                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} />
-                        <div>
-                          <p className="text-xs font-mono font-semibold"
-                            style={{ color: signal === s.name ? s.color : 'var(--text2)' }}>
-                            {s.name}
-                          </p>
-                          <p className="text-[10px]" style={{ color: 'var(--text3)' }}>{s.desc}</p>
-                        </div>
+                      <button onClick={() => setModal(null)} className="ml-auto">
+                        <X size={16} style={{ color: 'var(--text3)' }} />
                       </button>
-                    ))}
-                  </div>
+                    </div>
 
-                  <AnimatePresence>
-                    {killResult && (
-                      <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-                        className="px-4 py-2.5 rounded-xl text-xs mb-4 flex items-center gap-2"
-                        style={killResult.success ? {
-                          color: 'var(--green)',
-                          background: 'rgba(52,211,153,0.08)',
-                          border: '1px solid rgba(52,211,153,0.15)',
-                        } : {
-                          color: 'var(--red)',
-                          background: 'rgba(239,68,68,0.08)',
-                          border: '1px solid rgba(239,68,68,0.15)',
-                        }}>
-                        {killResult.success ? '✓' : '✗'} {killResult.msg}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                    <p className="text-xs mb-3" style={{ color: 'var(--text3)' }}>Choose signal:</p>
+                    <div className="grid grid-cols-2 gap-2 mb-5">
+                      {SIGNALS.map(s => (
+                        <button key={s.name} onClick={() => setSignal(s.name)}
+                          className="flex items-center gap-3 p-3 rounded-xl text-left transition-all"
+                          style={signal === s.name ? {
+                            borderColor: s.color + '50',
+                            border: `1px solid ${s.color}50`,
+                            background: s.color + '10',
+                          } : {
+                            border: '1px solid var(--border)',
+                          }}>
+                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} />
+                          <div>
+                            <p className="text-xs font-mono font-semibold"
+                              style={{ color: signal === s.name ? s.color : 'var(--text2)' }}>
+                              {s.name}
+                            </p>
+                            <p className="text-[10px]" style={{ color: 'var(--text3)' }}>{s.desc}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
 
-                  <div className="flex gap-2">
-                    <button onClick={() => setModal(null)} className="btn-ghost flex-1">Cancel</button>
-                    <button onClick={sendSignal}
-                      className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white"
-                      style={{ background: 'linear-gradient(135deg,#ef4444,#dc2626)', boxShadow: '0 4px 15px rgba(239,68,68,0.3)' }}>
-                      <Zap size={14} /> Send {signal}
-                    </button>
-                  </div>
-                </>
-              )}
+                    <AnimatePresence>
+                      {killResult && (
+                        <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                          className="px-4 py-2.5 rounded-xl text-xs mb-4 flex items-center gap-2"
+                          style={killResult.success ? {
+                            color: 'var(--green)',
+                            background: 'rgba(52,211,153,0.08)',
+                            border: '1px solid rgba(52,211,153,0.15)',
+                          } : {
+                            color: 'var(--red)',
+                            background: 'rgba(239,68,68,0.08)',
+                            border: '1px solid rgba(239,68,68,0.15)',
+                          }}>
+                          {killResult.success ? '✓' : '✗'} {killResult.msg}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    <div className="flex gap-2">
+                      <button onClick={() => setModal(null)} className="btn-ghost flex-1">Cancel</button>
+                      <button onClick={sendSignal}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white"
+                        style={{ background: 'linear-gradient(135deg,#ef4444,#dc2626)', boxShadow: '0 4px 15px rgba(239,68,68,0.3)' }}>
+                        <Zap size={14} /> Send {signal}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Realtime activity log: PIDs killed, processes started… */}
-      <ActivityLog scope="process" title="Process actions · live commands" height={200} />
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   )
 }

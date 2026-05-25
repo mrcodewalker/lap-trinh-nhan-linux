@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   RefreshCw, Trash2, Info, X, AlertTriangle, Upload,
@@ -7,7 +8,6 @@ import {
 import api from '../../utils/api'
 import { clsx } from 'clsx'
 import ExplainPanel from '../Explain/ExplainPanel'
-import ActivityLog from '../ActivityLog/ActivityLog'
 
 export default function ModuleManager() {
   const [modules, setModules] = useState([])
@@ -154,7 +154,7 @@ export default function ModuleManager() {
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             </button>
             <ExplainPanel concept="insmod" label="insmod" />
-            <ExplainPanel concept="rmmod"  label="rmmod" />
+            <ExplainPanel concept="rmmod" label="rmmod" />
             <ExplainPanel concept="printk" label="printk" />
           </div>
 
@@ -283,208 +283,208 @@ export default function ModuleManager() {
         </div>
       </div>
 
-      {/* ── Modals ── */}
-      <AnimatePresence>
-        {modal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="modal-backdrop"
-            onClick={() => setModal(null)}
-          >
+      {/* ── Modals (Portal) ── */}
+      {createPortal(
+        <AnimatePresence>
+          {modal && (
             <motion.div
-              initial={{ scale: 0.95, y: 10 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95 }}
-              className="modal-box max-w-lg"
-              onClick={e => e.stopPropagation()}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="modal-backdrop"
+              onClick={() => setModal(null)}
             >
+              <motion.div
+                initial={{ scale: 0.95, y: 10 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95 }}
+                className="modal-box max-w-lg"
+                onClick={e => e.stopPropagation()}
+              >
 
-              {/* ── Module info ── */}
-              {modal.type === 'info' && (
-                <>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
+                {/* ── Module info ── */}
+                {modal.type === 'info' && (
+                  <>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-9 h-9 rounded-xl flex items-center justify-center"
+                          style={{ background: 'rgba(6,182,212,0.12)', border: '1px solid rgba(6,182,212,0.2)' }}
+                        >
+                          <Cpu size={16} className="text-cyan-400" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-white text-sm font-mono">{modal.data.name}</p>
+                          <p className="text-xs text-white/30">{modal.data.size} bytes</p>
+                        </div>
+                      </div>
+                      <button onClick={() => setModal(null)}>
+                        <X size={16} className="text-white/30" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 mb-4">
+                      {[
+                        ['Size', modal.data.size + ' B'],
+                        ['Used By', modal.data.usedBy],
+                        ['Deps', modal.data.dependencies || 'none'],
+                      ].map(([k, v]) => (
+                        <div key={k} className="card p-3">
+                          <p className="text-[10px] text-white/30 uppercase tracking-wider">{k}</p>
+                          <p className="text-xs font-mono text-white/70 mt-0.5 truncate">{v}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <p className="text-[10px] text-white/25 uppercase tracking-wider mb-2">modinfo</p>
+                    <pre className="code-block text-xs max-h-52 overflow-auto">{modInfo}</pre>
+
+                    <div className="flex gap-2 mt-4">
+                      <button
+                        onClick={() => setModal({ type: 'unload', data: modal.data })}
+                        className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold text-red-400"
+                        style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}
+                      >
+                        <Trash2 size={13} /> Unload
+                      </button>
+                      <button onClick={() => setModal(null)} className="btn-ghost flex-1 text-xs">
+                        Close
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {/* ── Unload confirm ── */}
+                {modal.type === 'unload' && (
+                  <>
+                    <div className="flex items-center gap-3 mb-5">
                       <div
                         className="w-9 h-9 rounded-xl flex items-center justify-center"
-                        style={{ background: 'rgba(6,182,212,0.12)', border: '1px solid rgba(6,182,212,0.2)' }}
+                        style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.2)' }}
                       >
-                        <Cpu size={16} className="text-cyan-400" />
+                        <AlertTriangle size={16} className="text-red-400" />
                       </div>
                       <div>
-                        <p className="font-semibold text-white text-sm font-mono">{modal.data.name}</p>
-                        <p className="text-xs text-white/30">{modal.data.size} bytes</p>
+                        <p className="font-semibold text-white text-sm">Unload Module</p>
+                        <p className="text-xs text-white/35 font-mono">{modal.data.name}</p>
                       </div>
+                      <button onClick={() => setModal(null)} className="ml-auto">
+                        <X size={16} className="text-white/30" />
+                      </button>
                     </div>
-                    <button onClick={() => setModal(null)}>
-                      <X size={16} className="text-white/30" />
-                    </button>
-                  </div>
 
-                  <div className="grid grid-cols-3 gap-2 mb-4">
-                    {[
-                      ['Size', modal.data.size + ' B'],
-                      ['Used By', modal.data.usedBy],
-                      ['Deps', modal.data.dependencies || 'none'],
-                    ].map(([k, v]) => (
-                      <div key={k} className="card p-3">
-                        <p className="text-[10px] text-white/30 uppercase tracking-wider">{k}</p>
-                        <p className="text-xs font-mono text-white/70 mt-0.5 truncate">{v}</p>
-                      </div>
-                    ))}
-                  </div>
+                    <p className="text-xs text-white/40 mb-5">
+                      ⚠ Unloading a kernel module may affect system stability or running services that depend on it.
+                    </p>
 
-                  <p className="text-[10px] text-white/25 uppercase tracking-wider mb-2">modinfo</p>
-                  <pre className="code-block text-xs max-h-52 overflow-auto">{modInfo}</pre>
-
-                  <div className="flex gap-2 mt-4">
-                    <button
-                      onClick={() => setModal({ type: 'unload', data: modal.data })}
-                      className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold text-red-400"
-                      style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}
-                    >
-                      <Trash2 size={13} /> Unload
-                    </button>
-                    <button onClick={() => setModal(null)} className="btn-ghost flex-1 text-xs">
-                      Close
-                    </button>
-                  </div>
-                </>
-              )}
-
-              {/* ── Unload confirm ── */}
-              {modal.type === 'unload' && (
-                <>
-                  <div className="flex items-center gap-3 mb-5">
-                    <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center"
-                      style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.2)' }}
-                    >
-                      <AlertTriangle size={16} className="text-red-400" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-white text-sm">Unload Module</p>
-                      <p className="text-xs text-white/35 font-mono">{modal.data.name}</p>
-                    </div>
-                    <button onClick={() => setModal(null)} className="ml-auto">
-                      <X size={16} className="text-white/30" />
-                    </button>
-                  </div>
-
-                  <p className="text-xs text-white/40 mb-5">
-                    ⚠ Unloading a kernel module may affect system stability or running services that depend on it.
-                  </p>
-
-                  <div className="flex gap-2">
-                    <button onClick={() => setModal(null)} className="btn-ghost flex-1">Cancel</button>
-                    <button
-                      onClick={() => { unload(modal.data.name); setModal(null) }}
-                      className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white"
-                      style={{
-                        background: 'linear-gradient(135deg,#ef4444,#dc2626)',
-                        boxShadow: '0 4px 15px rgba(239,68,68,0.3)'
-                      }}
-                    >
-                      <Trash2 size={14} /> Unload
-                    </button>
-                  </div>
-                </>
-              )}
-
-              {/* ── Load module ── */}
-              {modal.type === 'load' && (
-                <>
-                  <div className="flex items-center gap-3 mb-5">
-                    <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center"
-                      style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.2)' }}
-                    >
-                      <Upload size={16} className="text-violet-400" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-white text-sm">Load Kernel Module</p>
-                      <p className="text-xs text-white/35">insmod — direct module loading</p>
-                    </div>
-                    <button onClick={() => setModal(null)} className="ml-auto">
-                      <X size={16} className="text-white/30" />
-                    </button>
-                  </div>
-
-                  <div className="space-y-3 mb-4">
-                    <div>
-                      <label className="text-xs text-white/35 block mb-1.5">Module path (.ko file)</label>
-                      <input
-                        value={loadPath}
-                        onChange={e => setLoadPath(e.target.value)}
-                        className="input mono"
-                        placeholder="/path/to/module.ko"
-                        onKeyDown={e => e.key === 'Enter' && loadModule()}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-white/35 block mb-1.5">Parameters (optional)</label>
-                      <input
-                        value={loadParams}
-                        onChange={e => setLoadParams(e.target.value)}
-                        className="input mono"
-                        placeholder="param1=value1 param2=value2"
-                      />
-                    </div>
-                  </div>
-
-                  <div
-                    className="px-4 py-3 rounded-xl text-xs text-yellow-400 flex items-center gap-2 mb-4"
-                    style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.15)' }}
-                  >
-                    <AlertTriangle size={13} />
-                    Loading kernel modules can affect system stability. Use with caution.
-                  </div>
-
-                  <AnimatePresence>
-                    {opResult && (
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className={`px-4 py-2.5 rounded-xl text-xs mb-4 flex items-center gap-2 ${opResult.success
-                          ? 'text-emerald-400 border border-emerald-500/15'
-                          : 'text-red-400 border border-red-500/15'
-                          }`}
+                    <div className="flex gap-2">
+                      <button onClick={() => setModal(null)} className="btn-ghost flex-1">Cancel</button>
+                      <button
+                        onClick={() => { unload(modal.data.name); setModal(null) }}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white"
                         style={{
-                          background: opResult.success
-                            ? 'rgba(52,211,153,0.08)'
-                            : 'rgba(239,68,68,0.08)'
+                          background: 'linear-gradient(135deg,#ef4444,#dc2626)',
+                          boxShadow: '0 4px 15px rgba(239,68,68,0.3)'
                         }}
                       >
-                        {opResult.success ? <CheckCircle size={13} /> : <AlertCircle size={13} />}
-                        {opResult.msg}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                        <Trash2 size={14} /> Unload
+                      </button>
+                    </div>
+                  </>
+                )}
 
-                  <div className="flex gap-2">
-                    <button onClick={() => setModal(null)} className="btn-ghost flex-1">Cancel</button>
-                    <button
-                      onClick={loadModule}
-                      disabled={!loadPath.trim() || busy === 'loading'}
-                      className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40"
+                {/* ── Load module ── */}
+                {modal.type === 'load' && (
+                  <>
+                    <div className="flex items-center gap-3 mb-5">
+                      <div
+                        className="w-9 h-9 rounded-xl flex items-center justify-center"
+                        style={{ background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.2)' }}
+                      >
+                        <Upload size={16} className="text-violet-400" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-white text-sm">Load Kernel Module</p>
+                        <p className="text-xs text-white/35">insmod — direct module loading</p>
+                      </div>
+                      <button onClick={() => setModal(null)} className="ml-auto">
+                        <X size={16} className="text-white/30" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-3 mb-4">
+                      <div>
+                        <label className="text-xs text-white/35 block mb-1.5">Module path (.ko file)</label>
+                        <input
+                          value={loadPath}
+                          onChange={e => setLoadPath(e.target.value)}
+                          className="input mono"
+                          placeholder="/path/to/module.ko"
+                          onKeyDown={e => e.key === 'Enter' && loadModule()}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-white/35 block mb-1.5">Parameters (optional)</label>
+                        <input
+                          value={loadParams}
+                          onChange={e => setLoadParams(e.target.value)}
+                          className="input mono"
+                          placeholder="param1=value1 param2=value2"
+                        />
+                      </div>
+                    </div>
+
+                    <div
+                      className="px-4 py-3 rounded-xl text-xs text-yellow-400 flex items-center gap-2 mb-4"
+                      style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.15)' }}
                     >
-                      {busy === 'loading'
-                        ? <RefreshCw size={13} className="animate-spin" />
-                        : <Zap size={13} />
-                      }
-                      Load Module
-                    </button>
-                  </div>
-                </>
-              )}
+                      <AlertTriangle size={13} />
+                      Loading kernel modules can affect system stability. Use with caution.
+                    </div>
 
+                    <AnimatePresence>
+                      {opResult && (
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className={`px-4 py-2.5 rounded-xl text-xs mb-4 flex items-center gap-2 ${opResult.success
+                            ? 'text-emerald-400 border border-emerald-500/15'
+                            : 'text-red-400 border border-red-500/15'
+                            }`}
+                          style={{
+                            background: opResult.success
+                              ? 'rgba(52,211,153,0.08)'
+                              : 'rgba(239,68,68,0.08)'
+                          }}
+                        >
+                          {opResult.success ? <CheckCircle size={13} /> : <AlertCircle size={13} />}
+                          {opResult.msg}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    <div className="flex gap-2">
+                      <button onClick={() => setModal(null)} className="btn-ghost flex-1">Cancel</button>
+                      <button
+                        onClick={loadModule}
+                        disabled={!loadPath.trim() || busy === 'loading'}
+                        className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-40"
+                      >
+                        {busy === 'loading'
+                          ? <RefreshCw size={13} className="animate-spin" />
+                          : <Zap size={13} />
+                        }
+                        Load Module
+                      </button>
+                    </div>
+                  </>
+                )}
+
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <ActivityLog scope="kernel" title="Kernel module actions · insmod/rmmod/build" height={200} />
+          )}
+        </AnimatePresence>,
+        document.body)}
     </div>
   )
 }

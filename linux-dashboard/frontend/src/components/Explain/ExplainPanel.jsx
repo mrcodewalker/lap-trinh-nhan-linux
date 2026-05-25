@@ -5,6 +5,7 @@
  * Tương ứng yêu cầu "Explain Button / Command Breakdown / Kernel Flow Explanation".
  */
 import React, { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Info, X, BookOpen, Cpu, AlertTriangle, ChevronRight, Terminal } from 'lucide-react'
 import { CONCEPTS, SYSCALLS } from '../../data/linuxConcepts'
@@ -75,7 +76,7 @@ function ConceptBody({ data }) {
           <div className="flex flex-wrap gap-1">
             {data.concepts.map((c) => (
               <span key={c} className="px-2 py-0.5 rounded-full text-[10px] mono"
-                    style={{ background: 'var(--surface2)', color: 'var(--text2)', border: '1px solid var(--border2)' }}>
+                style={{ background: 'var(--surface2)', color: 'var(--text2)', border: '1px solid var(--border2)' }}>
                 {c}
               </span>
             ))}
@@ -136,37 +137,40 @@ export default function ExplainPanel({ concept, data, label = 'Explain', size = 
         {label}
       </button>
 
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="modal-backdrop"
-            onClick={() => setOpen(false)}
-          >
+      {createPortal(
+        <AnimatePresence>
+          {open && (
             <motion.div
-              initial={{ scale: 0.95, y: 12, opacity: 0 }}
-              animate={{ scale: 1, y: 0, opacity: 1 }}
-              exit={{ scale: 0.95, y: 8, opacity: 0 }}
-              transition={{ duration: 0.18 }}
-              className="modal-box"
-              style={{ maxWidth: size === 'lg' ? 720 : 560, maxHeight: '85vh', overflow: 'auto' }}
-              onClick={e => e.stopPropagation()}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="modal-backdrop"
+              onClick={() => setOpen(false)}
             >
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Info size={16} style={{ color: 'var(--accent)' }} />
-                  <h3 className="text-base font-bold" style={{ color: 'var(--text)' }}>
-                    {concept ? `Linux concept · ${concept}` : 'Explanation'}
-                  </h3>
+              <motion.div
+                initial={{ scale: 0.95, y: 12, opacity: 0 }}
+                animate={{ scale: 1, y: 0, opacity: 1 }}
+                exit={{ scale: 0.95, y: 8, opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                className="modal-box"
+                style={{ maxWidth: size === 'lg' ? 720 : 560, maxHeight: '85vh', overflow: 'auto' }}
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Info size={16} style={{ color: 'var(--accent)' }} />
+                    <h3 className="text-base font-bold" style={{ color: 'var(--text)' }}>
+                      {concept ? `Linux concept · ${concept}` : 'Explanation'}
+                    </h3>
+                  </div>
+                  <button onClick={() => setOpen(false)} className="btn-ghost p-1"><X size={14} /></button>
                 </div>
-                <button onClick={() => setOpen(false)} className="btn-ghost p-1"><X size={14} /></button>
-              </div>
-              <ConceptBody data={d} />
+                <ConceptBody data={d} />
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </>
   )
 }
