@@ -6,6 +6,7 @@ import {
   Zap, ChevronDown, ChevronUp, Activity, Cpu, Clock, User, Terminal
 } from 'lucide-react'
 import api from '../../utils/api'
+import ExplainPanel from '../Explain/ExplainPanel'
 
 const SIGNALS = [
   { name: 'SIGTERM', desc: 'Graceful terminate', color: '#f59e0b' },
