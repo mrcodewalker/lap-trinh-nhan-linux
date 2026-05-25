@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { CalendarClock, Plus, Trash2, RefreshCw, X, Check, Clock, FileCode, Play, Eye, Copy } from 'lucide-react'
 import api from '../../utils/api'
 import { clsx } from 'clsx'
+import ExplainPanel from '../Explain/ExplainPanel'
+import ActivityLog from '../ActivityLog/ActivityLog'
 
 const PRESETS = [
   { label: 'Every minute', value: '* * * * *' },
@@ -475,6 +477,73 @@ export default function CronManager() {
         )}
       </AnimatePresence>
 
+<<<<<<< HEAD
+=======
+      {/* Run result modal/banner */}
+      <AnimatePresence>
+        {runResult && (
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="card w-full max-w-2xl overflow-hidden flex flex-col max-h-[80vh]">
+              <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <Terminal size={16} className="text-cyan-400" />
+                  Task Execution Result
+                </h3>
+                <button onClick={() => setRunResult(null)} className="p-1 hover:bg-white/10 rounded">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="p-4 overflow-auto mono text-xs bg-[#050608] flex-1">
+                {runResult.success ? (
+                  <pre className="text-emerald-400">{runResult.output}</pre>
+                ) : (
+                  <pre className="text-rose-400">{runResult.error || runResult.output}</pre>
+                )}
+              </div>
+              <div className="p-3 border-t border-white/10 bg-white/5 flex justify-end">
+                <button onClick={() => setRunResult(null)} className="btn-primary py-1.5 px-4 text-xs">Close</button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Toolbar */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+            <CalendarClock size={20} className="text-cyan-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-white">Cron Jobs</h2>
+            <p className="text-xs text-white/40">{jobs.length} active schedules</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={loadJobs} className="btn-ghost p-2 rounded-lg bg-white/5">
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          </button>
+          <ExplainPanel concept="cron" label="cron" />
+          <button onClick={fetchLogs} className="btn-ghost flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white/5 hover:bg-cyan-500/10 transition-all border border-white/5">
+            <Terminal size={14} /> View Logs
+          </button>
+          <button onClick={() => setShowForm(v => !v)} className="btn-primary flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-cyan-500/20">
+            <Plus size={16} /> New Task
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
+          className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-3">
+          <AlertCircle size={14} />
+          {error}
+          <button onClick={() => setError(null)} className="ml-auto opacity-60 hover:opacity-100"><X size={14} /></button>
+        </motion.div>
+      )}
+
+>>>>>>> 910f5b64fdea84c5d6fa7854c198bd42b8d0ef0c
       {/* Add form */}
       <AnimatePresence>
         {showForm && (
@@ -657,6 +726,9 @@ export default function CronManager() {
           </div>
         )}
       </div>
+
+      {/* Realtime activity log: cron add/remove/run thật */}
+      <ActivityLog scope="cron" title="Cron operations · live commands" height={200} />
     </div>
   )
 }

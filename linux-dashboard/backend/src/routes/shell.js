@@ -9,6 +9,7 @@ const path = require('path');
 const os = require('os');
 const multer = require('multer');
 const logger = require('../utils/logger');
+const activity = require('../utils/activity');
 
 const router = express.Router();
 
@@ -97,6 +98,7 @@ router.post('/files/write', async (req, res) => {
 
     await fs.writeFile(file, content, 'utf-8');
     logger.info(`File written: ${file}`);
+    activity.log({ scope: 'files', command: `tee ${file}  # write ${content.length} bytes`, code: 0 });
 
     res.json({ message: 'File written successfully', file });
   } catch (err) {
@@ -115,6 +117,7 @@ router.post('/files/create', async (req, res) => {
 
     await fs.writeFile(file, content, 'utf-8');
     logger.info(`File created: ${file}`);
+    activity.log({ scope: 'files', command: `touch ${file}`, code: 0 });
 
     res.json({ message: 'File created successfully', file });
   } catch (err) {
@@ -133,6 +136,7 @@ router.post('/files/delete', async (req, res) => {
 
     await fs.unlink(file);
     logger.info(`File deleted: ${file}`);
+    activity.log({ scope: 'files', command: `rm ${file}`, code: 0 });
 
     res.json({ message: 'File deleted successfully' });
   } catch (err) {
@@ -151,6 +155,7 @@ router.post('/files/rename', async (req, res) => {
 
     await fs.rename(oldPath, newPath);
     logger.info(`File renamed: ${oldPath} -> ${newPath}`);
+    activity.log({ scope: 'files', command: `mv ${oldPath} ${newPath}`, code: 0 });
 
     res.json({ message: 'File renamed successfully' });
   } catch (err) {
@@ -176,6 +181,7 @@ router.post('/files/chmod', (req, res) => {
 
     chmod.on('close', (code) => {
       if (res.headersSent) return;
+      activity.log({ scope: 'files', command: `chmod ${mode} ${file}`, code, output: error });
       if (code === 0) {
         logger.info(`Permissions changed: ${file} to ${mode}`);
         res.json({ message: 'Permissions changed successfully' });
@@ -222,6 +228,7 @@ router.post('/files/mkdir', async (req, res) => {
 
     await fs.mkdir(dir, { recursive: true });
     logger.info(`Directory created: ${dir}`);
+    activity.log({ scope: 'files', command: `mkdir -p ${dir}`, code: 0 });
     res.json({ message: 'Directory created successfully', dir });
   } catch (err) {
     if (!res.headersSent) res.status(500).json({ error: err.message });
@@ -361,8 +368,10 @@ router.post('/cron/add', (req, res) => {
       echo.on('close', (code) => {
         if (code === 0) {
           logger.info(`Cron job added: ${cronLine}`);
+          activity.log({ scope: 'cron', command: `crontab -  # add: ${cronLine}`, code: 0 });
           res.json({ message: 'Cron job added successfully', job: cronLine });
         } else {
+          activity.log({ scope: 'cron', command: `crontab -  # add: ${cronLine}`, code, level: 'error' });
           res.status(500).json({ error: 'Failed to add cron job' });
         }
       });
@@ -401,8 +410,10 @@ router.post('/cron/remove', (req, res) => {
       echo.on('close', (code) => {
         if (code === 0) {
           logger.info(`Cron job removed: ID ${id}`);
+          activity.log({ scope: 'cron', command: `crontab -  # remove job #${id}`, code: 0 });
           res.json({ message: 'Cron job removed successfully' });
         } else {
+          activity.log({ scope: 'cron', command: `crontab -  # remove job #${id}`, code, level: 'error' });
           res.status(500).json({ error: 'Failed to remove cron job' });
         }
       });
@@ -507,6 +518,12 @@ router.post('/packages/install', (req, res) => {
 
     apt.on('close', (code) => {
       if (!res.headersSent) {
+        activity.log({
+          scope: 'packages',
+          command: `apt install -y ${pkg}`,
+          code,
+          output: (output + error).slice(0, 800),
+        });
         res.json({
           message: code === 0 ? 'Package installed successfully' : 'Installation failed',
           output,
@@ -552,6 +569,12 @@ router.post('/packages/remove', (req, res) => {
     });
 
     apt.on('close', (code) => {
+      activity.log({
+        scope: 'packages',
+        command: `apt remove -y ${pkg}`,
+        code,
+        output: (output + error).slice(0, 800),
+      });
       res.json({
         message: code === 0 ? 'Package removed successfully' : 'Removal failed',
         output,
@@ -619,6 +642,7 @@ router.post('/time/set', (req, res) => {
     });
 
     timedatectl.on('close', (code) => {
+      activity.log({ scope: 'system', command: `timedatectl set-time '${datetime}'`, code, output: error });
       if (code === 0) {
         res.json({ message: 'System time updated successfully' });
       } else {
@@ -649,6 +673,7 @@ router.post('/time/timezone', (req, res) => {
     });
 
     timedatectl.on('close', (code) => {
+      activity.log({ scope: 'system', command: `timedatectl set-timezone ${timezone}`, code, output: error });
       if (code === 0) {
         res.json({ message: 'Timezone updated successfully' });
       } else {
@@ -675,6 +700,7 @@ router.post('/cron/run', (req, res) => {
     child.stderr.on('data', (data) => error += data.toString());
 
     child.on('close', (code) => {
+      activity.log({ scope: 'cron', command: `bash -c "${command}"`, code, output: (output || error).slice(0, 1000) });
       res.json({
         success: code === 0,
         output: output || '(no output)',

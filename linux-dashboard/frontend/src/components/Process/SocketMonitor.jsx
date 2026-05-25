@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import api from '../../utils/api'
 import { clsx } from 'clsx'
+import ActivityLog from '../ActivityLog/ActivityLog'
 
 const SUSPICIOUS_PORTS = [22, 23, 3389, 4444, 5900, 6666, 31337]
 
@@ -297,6 +298,9 @@ export default function SocketMonitor() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Realtime activity log scope=process — show kill from socket grid */}
+      <ActivityLog scope="process" title="Socket-related actions · live" height={180} />
     </div>
   )
 }

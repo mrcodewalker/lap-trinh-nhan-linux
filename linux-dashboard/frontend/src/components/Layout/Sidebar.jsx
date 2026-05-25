@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Terminal, Activity, Cpu, ChevronRight, Menu, X, Zap } from 'lucide-react'
+import { Terminal, Activity, Cpu, ChevronRight, Menu, X, Zap, PlayCircle, ScrollText } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 
 const NAV = [
@@ -27,6 +27,22 @@ const NAV = [
     path: '/kernel',
     color: '#f472b6',
     glow: 'rgba(244,114,182,0.25)',
+  },
+  {
+    icon: PlayCircle,
+    label: 'Demo Scenarios',
+    sub: 'Fork · Zombie · TCP · LKM',
+    path: '/demo',
+    color: '#34d399',
+    glow: 'rgba(52,211,153,0.25)',
+  },
+  {
+    icon: ScrollText,
+    label: 'Activity Log',
+    sub: 'All commands executed',
+    path: '/activity',
+    color: '#fbbf24',
+    glow: 'rgba(251,191,36,0.25)',
   },
 ]
 

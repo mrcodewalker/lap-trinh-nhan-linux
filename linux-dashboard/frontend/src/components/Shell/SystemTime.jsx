@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Clock, Globe, RefreshCw, Check, X } from 'lucide-react'
 import api from '../../utils/api'
+import ActivityLog from '../ActivityLog/ActivityLog'
 
 const TIMEZONES = [
   'UTC','America/New_York','America/Los_Angeles','America/Chicago',
@@ -145,6 +146,9 @@ export default function SystemTime() {
           <button onClick={() => setError(null)} className="ml-auto"><X size={12} /></button>
         </div>
       )}
+
+      {/* Realtime activity log: timedatectl set-time / set-timezone */}
+      <ActivityLog scope="system" title="System time commands · live" height={180} />
     </div>
   )
 }

@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import api from '../../utils/api'
 import { clsx } from 'clsx'
+import ExplainPanel from '../Explain/ExplainPanel'
+import ActivityLog from '../ActivityLog/ActivityLog'
 
 const getFileIcon = (file) => {
   if (file.type === 'directory') return <Folder size={20} className="text-cyan-400" />
@@ -210,6 +212,9 @@ export default function FileManager() {
           >
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
           </button>
+
+          {/* Linux-concept explainer */}
+          <ExplainPanel concept="chmod" label="chmod" />
         </div>
       </div>
 
@@ -358,6 +363,9 @@ export default function FileManager() {
           <span>System {loading ? 'Busy' : 'Ready'}</span>
         </div>
       </div>
+
+      {/* Realtime activity log — mọi command thật của file ops */}
+      <ActivityLog scope="files" title="File operations · live commands" height={200} />
     </motion.div>
   )
 }

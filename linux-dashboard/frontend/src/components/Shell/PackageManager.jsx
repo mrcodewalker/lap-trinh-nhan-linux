@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Package, Search, Trash2, Download, RefreshCw, X, CheckCircle, AlertCircle, Terminal as TerminalIcon } from 'lucide-react'
 import api from '../../utils/api'
 import { useSocketStore } from '../../store/socketStore'
+import ActivityLog from '../ActivityLog/ActivityLog'
 
 export default function PackageManager() {
   const [packages, setPackages]     = useState([])
@@ -234,6 +235,9 @@ export default function PackageManager() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Realtime activity log: apt install/remove output thật */}
+      <ActivityLog scope="packages" title="Package manager · live commands" height={220} />
     </div>
   )
 }

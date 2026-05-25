@@ -5,6 +5,8 @@ import {
   Zap, ChevronDown, ChevronUp, Activity, Cpu, Clock, User, Terminal
 } from 'lucide-react'
 import api from '../../utils/api'
+import ExplainPanel from '../Explain/ExplainPanel'
+import ActivityLog from '../ActivityLog/ActivityLog'
 
 const SIGNALS = [
   { name: 'SIGTERM', desc: 'Graceful terminate', color: '#f59e0b' },
@@ -145,6 +147,8 @@ export default function ProcessManager() {
         <button onClick={load} className="btn-ghost p-2">
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
         </button>
+        <ExplainPanel concept="fork" label="fork()" />
+        <ExplainPanel concept="zombie" label="zombie" />
         <span className="text-xs" style={{ color: 'var(--text3)' }}>{sorted.length} / {processes.length}</span>
       </div>
 
@@ -355,6 +359,9 @@ export default function ProcessManager() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Realtime activity log: PIDs killed, processes started… */}
+      <ActivityLog scope="process" title="Process actions · live commands" height={200} />
     </div>
   )
 }
