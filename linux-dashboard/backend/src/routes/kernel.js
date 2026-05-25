@@ -392,7 +392,7 @@ clean:
     make.on('close', async (code) => {
       if (code === 0) {
         const koFile = path.join(moduleDir, `${moduleName}.ko`);
-        
+
         if (autoLoad) {
           // Load module
           const insmod = spawn('sudo', ['insmod', koFile]);
@@ -519,7 +519,7 @@ router.get('/devices', (req, res) => {
 
     cat.on('close', () => {
       const sections = output.split('\n\n');
-      
+
       const parseSection = (text) => {
         if (!text) return [];
         return text.split('\n')
@@ -538,6 +538,90 @@ router.get('/devices', (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ============ PROC / DEVICE INFO ============
+
+// GET /api/kernel/proc-devices - Parse /proc/devices for major IDs
+router.get('/proc-devices', async (req, res) => {
+  try {
+    const content = await fs.readFile('/proc/devices', 'utf-8');
+    const lines = content.split('\n');
+    const charDevices = [];
+    const blockDevices = [];
+    let section = '';
+
+    for (const line of lines) {
+      if (line.includes('Character devices')) { section = 'char'; continue; }
+      if (line.includes('Block devices')) { section = 'block'; continue; }
+      const match = line.trim().match(/^(\d+)\s+(.+)$/);
+      if (match) {
+        const entry = { major: parseInt(match[1]), name: match[2].trim() };
+        if (section === 'char') charDevices.push(entry);
+        else if (section === 'block') blockDevices.push(entry);
+      }
+    }
+
+    res.json({ charDevices, blockDevices });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/kernel/proc-modules - Detailed /proc/modules info
+router.get('/proc-modules', async (req, res) => {
+  try {
+    const content = await fs.readFile('/proc/modules', 'utf-8');
+    const modules = content.split('\n').filter(l => l.trim()).map(line => {
+      const parts = line.split(/\s+/);
+      return {
+        name: parts[0],
+        size: parseInt(parts[1]) || 0,
+        refCount: parseInt(parts[2]) || 0,
+        usedBy: parts[3] === '-' ? [] : (parts[3] || '').split(',').filter(Boolean),
+        state: parts[4] || '',
+        offset: parts[5] || '',
+      };
+    });
+    res.json({ modules });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/kernel/module-devices/:name - Find /dev entries for a module
+router.get('/module-devices/:name', (req, res) => {
+  const { name } = req.params;
+  // Search /dev for devices that might be associated with this module
+  const proc = spawn('bash', ['-c', `find /dev -maxdepth 2 -name "*${name}*" 2>/dev/null; ls -la /dev/${name}* 2>/dev/null`]);
+  let output = '';
+
+  proc.stdout.on('data', (data) => { output += data.toString(); });
+  proc.on('close', () => {
+    const devices = output.split('\n').filter(l => l.trim()).map(line => {
+      // Parse ls -la output for major:minor
+      const match = line.match(/([crwx-]+)\s+\d+\s+\w+\s+\w+\s+(\d+),\s*(\d+)\s+.+\s+(.+)$/);
+      if (match) {
+        return { permissions: match[1], major: parseInt(match[2]), minor: parseInt(match[3]), path: match[4] };
+      }
+      return { path: line.trim() };
+    });
+    res.json({ devices, raw: output });
+  });
+  proc.on('error', () => res.json({ devices: [], raw: '' }));
+});
+
+// GET /api/kernel/proc-entry/:name - Check if module created /proc entry
+router.get('/proc-entry/:name', (req, res) => {
+  const { name } = req.params;
+  const proc = spawn('bash', ['-c', `find /proc -maxdepth 1 -name "*${name}*" 2>/dev/null; cat /proc/${name} 2>/dev/null | head -20`]);
+  let output = '';
+
+  proc.stdout.on('data', (data) => { output += data.toString(); });
+  proc.on('close', () => {
+    res.json({ found: output.trim().length > 0, content: output.trim() });
+  });
+  proc.on('error', () => res.json({ found: false, content: '' }));
 });
 
 module.exports = router;

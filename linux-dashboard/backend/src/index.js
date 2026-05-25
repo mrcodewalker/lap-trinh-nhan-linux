@@ -18,6 +18,7 @@ const logger = require('./utils/logger');
 const shellRoutes = require('./routes/shell');
 const processRoutes = require('./routes/process');
 const kernelRoutes = require('./routes/kernel');
+const straceRoutes = require('./routes/strace');
 
 // Socket handlers
 const { initSocketHandlers } = require('./socket/socketManager');
@@ -53,6 +54,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use('/api/shell', shellRoutes);
 app.use('/api/process', processRoutes);
 app.use('/api/kernel', kernelRoutes);
+app.use('/api/strace', straceRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

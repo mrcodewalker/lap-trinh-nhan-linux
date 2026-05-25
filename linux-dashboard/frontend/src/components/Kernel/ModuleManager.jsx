@@ -8,18 +8,18 @@ import api from '../../utils/api'
 import { clsx } from 'clsx'
 
 export default function ModuleManager() {
-  const [modules, setModules]       = useState([])
-  const [loading, setLoading]       = useState(false)
-  const [error, setError]           = useState(null)
-  const [search, setSearch]         = useState('')
-  const [modal, setModal]           = useState(null)
-  const [modInfo, setModInfo]       = useState('')
-  const [loadPath, setLoadPath]     = useState('')
+  const [modules, setModules] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [search, setSearch] = useState('')
+  const [modal, setModal] = useState(null)
+  const [modInfo, setModInfo] = useState('')
+  const [loadPath, setLoadPath] = useState('')
   const [loadParams, setLoadParams] = useState('')
-  const [busy, setBusy]             = useState(null)
-  const [opResult, setOpResult]     = useState(null)
-  const [kernelVer, setKernelVer]   = useState('')
-  const [devices, setDevices]       = useState({ charDevices: [], blockDevices: [] })
+  const [busy, setBusy] = useState(null)
+  const [opResult, setOpResult] = useState(null)
+  const [kernelVer, setKernelVer] = useState('')
+  const [devices, setDevices] = useState({ charDevices: [], blockDevices: [] })
 
   useEffect(() => {
     loadModules()
@@ -27,8 +27,7 @@ export default function ModuleManager() {
     loadDevices()
     const t = setInterval(() => {
       loadModules()
-      loadDevices()
-    }, 4000)
+    }, 5000)
     return () => clearInterval(t)
   }, [])
 
@@ -53,7 +52,7 @@ export default function ModuleManager() {
 
   const loadDevices = async () => {
     try {
-      const r = await api.get('/kernel/devices')
+      const r = await api.get('/kernel/proc-devices')
       setDevices(r.data)
     } catch { /* silent */ }
   }
@@ -129,7 +128,7 @@ export default function ModuleManager() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 min-h-0">
-        
+
         {/* Main List */}
         <div className="xl:col-span-2 space-y-3">
           {/* Toolbar */}
@@ -154,43 +153,42 @@ export default function ModuleManager() {
             </button>
           </div>
 
-      {/* Op result banner */}
-      <AnimatePresence>
-        {opResult && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className={`px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 ${
-              opResult.success
-                ? 'text-emerald-400 border border-emerald-500/15'
-                : 'text-red-400 border border-red-500/15'
-            }`}
-            style={{
-              background: opResult.success
-                ? 'rgba(52,211,153,0.08)'
-                : 'rgba(239,68,68,0.08)'
-            }}
-          >
-            {opResult.success ? <CheckCircle size={13} /> : <AlertCircle size={13} />}
-            {opResult.msg}
-            <button onClick={() => setOpResult(null)} className="ml-auto">
-              <X size={12} />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          {/* Op result banner */}
+          <AnimatePresence>
+            {opResult && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className={`px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 ${opResult.success
+                  ? 'text-emerald-400 border border-emerald-500/15'
+                  : 'text-red-400 border border-red-500/15'
+                  }`}
+                style={{
+                  background: opResult.success
+                    ? 'rgba(52,211,153,0.08)'
+                    : 'rgba(239,68,68,0.08)'
+                }}
+              >
+                {opResult.success ? <CheckCircle size={13} /> : <AlertCircle size={13} />}
+                {opResult.msg}
+                <button onClick={() => setOpResult(null)} className="ml-auto">
+                  <X size={12} />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-      {/* Error banner */}
-      {error && (
-        <div
-          className="px-4 py-2.5 rounded-xl text-xs text-red-400 flex items-center gap-2"
-          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}
-        >
-          {error}
-          <button onClick={() => setError(null)} className="ml-auto"><X size={12} /></button>
-        </div>
-      )}
+          {/* Error banner */}
+          {error && (
+            <div
+              className="px-4 py-2.5 rounded-xl text-xs text-red-400 flex items-center gap-2"
+              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}
+            >
+              {error}
+              <button onClick={() => setError(null)} className="ml-auto"><X size={12} /></button>
+            </div>
+          )}
 
           <div className="card overflow-hidden border-white/5">
             <div className="overflow-x-auto max-h-[600px]">
@@ -205,7 +203,7 @@ export default function ModuleManager() {
                 </thead>
                 <tbody className="divide-y divide-white/[0.03]">
                   {filtered.slice(0, 50).map((mod, i) => (
-                    <tr key={mod.name} 
+                    <tr key={mod.name}
                       className="group hover:bg-white/[0.02] transition-colors cursor-pointer"
                       onClick={() => { setModal({ type: 'info', data: mod }); getInfo(mod.name) }}>
                       <td className="px-4 py-3">
@@ -214,7 +212,7 @@ export default function ModuleManager() {
                           <span className="font-mono text-sm text-cyan-400 font-bold">{mod.name}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-white/40 font-mono">{(parseInt(mod.size)/1024).toFixed(1)} KB</td>
+                      <td className="px-4 py-3 text-xs text-white/40 font-mono">{(parseInt(mod.size) / 1024).toFixed(1)} KB</td>
                       <td className="px-4 py-3">
                         <span className={clsx(
                           "px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter",
@@ -250,7 +248,7 @@ export default function ModuleManager() {
               <Zap size={14} className="text-amber-400" />
               Major ID Mapping
             </h3>
-            
+
             <div className="space-y-4 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar">
               <div>
                 <p className="text-[10px] font-bold text-white/20 uppercase mb-2 tracking-widest">Character Devices</p>
@@ -321,9 +319,9 @@ export default function ModuleManager() {
 
                   <div className="grid grid-cols-3 gap-2 mb-4">
                     {[
-                      ['Size',    modal.data.size + ' B'],
+                      ['Size', modal.data.size + ' B'],
                       ['Used By', modal.data.usedBy],
-                      ['Deps',    modal.data.dependencies || 'none'],
+                      ['Deps', modal.data.dependencies || 'none'],
                     ].map(([k, v]) => (
                       <div key={k} className="card p-3">
                         <p className="text-[10px] text-white/30 uppercase tracking-wider">{k}</p>
@@ -443,11 +441,10 @@ export default function ModuleManager() {
                       <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className={`px-4 py-2.5 rounded-xl text-xs mb-4 flex items-center gap-2 ${
-                          opResult.success
-                            ? 'text-emerald-400 border border-emerald-500/15'
-                            : 'text-red-400 border border-red-500/15'
-                        }`}
+                        className={`px-4 py-2.5 rounded-xl text-xs mb-4 flex items-center gap-2 ${opResult.success
+                          ? 'text-emerald-400 border border-emerald-500/15'
+                          : 'text-red-400 border border-red-500/15'
+                          }`}
                         style={{
                           background: opResult.success
                             ? 'rgba(52,211,153,0.08)'

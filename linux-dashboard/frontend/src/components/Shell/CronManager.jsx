@@ -1,37 +1,250 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CalendarClock, Plus, Trash2, RefreshCw, X, Check, Clock, AlertCircle, Terminal, Play } from 'lucide-react'
+import { CalendarClock, Plus, Trash2, RefreshCw, X, Check, Clock, FileCode, Play, Eye, Copy } from 'lucide-react'
 import api from '../../utils/api'
 import { clsx } from 'clsx'
 
 const PRESETS = [
-  { label: 'Every minute',    value: '* * * * *' },
-  { label: 'Every hour',      value: '0 * * * *' },
-  { label: 'Daily at 2am',    value: '0 2 * * *' },
-  { label: 'Every Sunday',    value: '0 0 * * 0' },
-  { label: 'Monthly (1st)',   value: '0 0 1 * *' },
+  { label: 'Every minute', value: '* * * * *' },
+  { label: 'Every 5 min', value: '*/5 * * * *' },
+  { label: 'Every hour', value: '0 * * * *' },
+  { label: 'Every 6 hours', value: '0 */6 * * *' },
+  { label: 'Daily at 2am', value: '0 2 * * *' },
+  { label: 'Daily at midnight', value: '0 0 * * *' },
+  { label: 'Every Sunday', value: '0 0 * * 0' },
+  { label: 'Mon-Fri 9am', value: '0 9 * * 1-5' },
+  { label: 'Monthly (1st)', value: '0 0 1 * *' },
+  { label: 'Every 30s (workaround)', value: '* * * * *' },
 ]
 
-const FIELDS      = ['minute','hour','dayOfMonth','month','dayOfWeek']
-const FIELD_LABELS = ['Minute','Hour','Day/Month','Month','Day/Week']
-const FIELD_HINTS  = ['0-59','0-23','1-31','1-12','0-7']
+const SCRIPT_TEMPLATES = [
+  {
+    id: 'backup_files',
+    label: '🗂️ Backup Files',
+    desc: 'Backup a directory with timestamp',
+    lang: 'bash',
+    schedule: '0 2 * * *',
+    content: `#!/bin/bash
+# Backup script - runs daily at 2am
+BACKUP_DIR="/home/user/backups"
+SOURCE_DIR="/home/user/projects"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+mkdir -p "$BACKUP_DIR"
+tar -czf "$BACKUP_DIR/backup_$TIMESTAMP.tar.gz" "$SOURCE_DIR"
+
+# Keep only last 7 backups
+ls -t "$BACKUP_DIR"/backup_*.tar.gz | tail -n +8 | xargs rm -f 2>/dev/null
+echo "[$(date)] Backup completed: backup_$TIMESTAMP.tar.gz"
+`,
+  },
+  {
+    id: 'cleanup_logs',
+    label: '🧹 Cleanup Logs',
+    desc: 'Remove old log files > 7 days',
+    lang: 'bash',
+    schedule: '0 3 * * *',
+    content: `#!/bin/bash
+# Log cleanup - remove files older than 7 days
+LOG_DIRS=("/var/log/myapp" "/tmp/logs" "$HOME/.local/logs")
+
+for dir in "\${LOG_DIRS[@]}"; do
+  if [ -d "$dir" ]; then
+    find "$dir" -name "*.log" -mtime +7 -delete
+    echo "[$(date)] Cleaned: $dir"
+  fi
+done
+
+# Also truncate large log files (>100MB)
+find /var/log -name "*.log" -size +100M -exec truncate -s 0 {} \\;
+echo "[$(date)] Log cleanup completed"
+`,
+  },
+  {
+    id: 'system_health',
+    label: '💊 System Health Check',
+    desc: 'Monitor CPU, RAM, disk and alert',
+    lang: 'bash',
+    schedule: '*/10 * * * *',
+    content: `#!/bin/bash
+# System health check - every 10 minutes
+REPORT_FILE="/tmp/health_report.txt"
+ALERT_THRESHOLD_CPU=80
+ALERT_THRESHOLD_MEM=90
+ALERT_THRESHOLD_DISK=85
+
+echo "=== System Health Report $(date) ===" > "$REPORT_FILE"
+
+# CPU usage
+CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d. -f1)
+echo "CPU Usage: $CPU_USAGE%" >> "$REPORT_FILE"
+
+# Memory usage
+MEM_USAGE=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
+echo "Memory Usage: $MEM_USAGE%" >> "$REPORT_FILE"
+
+# Disk usage
+DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | tr -d '%')
+echo "Disk Usage: $DISK_USAGE%" >> "$REPORT_FILE"
+
+# Alerts
+if [ "$CPU_USAGE" -gt "$ALERT_THRESHOLD_CPU" ]; then
+  echo "⚠️  HIGH CPU: $CPU_USAGE%" >> "$REPORT_FILE"
+fi
+if [ "$MEM_USAGE" -gt "$ALERT_THRESHOLD_MEM" ]; then
+  echo "⚠️  HIGH MEMORY: $MEM_USAGE%" >> "$REPORT_FILE"
+fi
+if [ "$DISK_USAGE" -gt "$ALERT_THRESHOLD_DISK" ]; then
+  echo "⚠️  HIGH DISK: $DISK_USAGE%" >> "$REPORT_FILE"
+fi
+
+echo "--- Top 5 processes by CPU ---" >> "$REPORT_FILE"
+ps aux --sort=-%cpu | head -6 >> "$REPORT_FILE"
+cat "$REPORT_FILE"
+`,
+  },
+  {
+    id: 'python_monitor',
+    label: '🐍 Python Monitor',
+    desc: 'Python script for process monitoring',
+    lang: 'python',
+    schedule: '*/5 * * * *',
+    content: `#!/usr/bin/env python3
+"""Process monitor - check if critical services are running"""
+import subprocess
+import datetime
+import os
+
+SERVICES = ['nginx', 'mysql', 'redis-server', 'docker']
+LOG_FILE = os.path.expanduser('~/.service_monitor.log')
+
+def check_service(name):
+    try:
+        result = subprocess.run(
+            ['systemctl', 'is-active', name],
+            capture_output=True, text=True, timeout=5
+        )
+        return result.stdout.strip() == 'active'
+    except Exception:
+        return False
+
+def main():
+    now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    report = []
+    
+    for svc in SERVICES:
+        status = check_service(svc)
+        icon = '✅' if status else '❌'
+        report.append(f"  {icon} {svc}: {'running' if status else 'STOPPED'}")
+        
+        if not status:
+            # Attempt restart
+            subprocess.run(['sudo', 'systemctl', 'restart', svc], 
+                         capture_output=True, timeout=10)
+            report.append(f"     ↳ Attempted restart")
+    
+    log_entry = f"[{now}] Service Check:\\n" + "\\n".join(report) + "\\n"
+    print(log_entry)
+    
+    with open(LOG_FILE, 'a') as f:
+        f.write(log_entry)
+
+if __name__ == '__main__':
+    main()
+`,
+  },
+  {
+    id: 'network_check',
+    label: '🌐 Network Watchdog',
+    desc: 'Check connectivity and DNS resolution',
+    lang: 'bash',
+    schedule: '*/2 * * * *',
+    content: `#!/bin/bash
+# Network watchdog - check connectivity every 2 minutes
+HOSTS=("8.8.8.8" "1.1.1.1" "google.com")
+LOG="/tmp/network_watchdog.log"
+INTERFACE="eth0"
+
+echo "[$(date)] Network check started" >> "$LOG"
+
+for host in "\${HOSTS[@]}"; do
+  if ping -c 1 -W 3 "$host" > /dev/null 2>&1; then
+    echo "  ✓ $host reachable" >> "$LOG"
+  else
+    echo "  ✗ $host UNREACHABLE" >> "$LOG"
+    # Try to restart networking
+    sudo systemctl restart NetworkManager 2>/dev/null
+    echo "  ↳ NetworkManager restarted" >> "$LOG"
+  fi
+done
+
+# Check DNS resolution
+if nslookup google.com > /dev/null 2>&1; then
+  echo "  ✓ DNS resolution OK" >> "$LOG"
+else
+  echo "  ✗ DNS FAILED - flushing cache" >> "$LOG"
+  sudo systemd-resolve --flush-caches 2>/dev/null
+fi
+
+# Log interface stats
+RX=$(cat /sys/class/net/$INTERFACE/statistics/rx_bytes 2>/dev/null || echo 0)
+TX=$(cat /sys/class/net/$INTERFACE/statistics/tx_bytes 2>/dev/null || echo 0)
+echo "  📊 $INTERFACE: RX=$(($RX/1024/1024))MB TX=$(($TX/1024/1024))MB" >> "$LOG"
+`,
+  },
+  {
+    id: 'disk_alert',
+    label: '💾 Disk Space Alert',
+    desc: 'Alert when disk usage exceeds threshold',
+    lang: 'bash',
+    schedule: '0 */4 * * *',
+    content: `#!/bin/bash
+# Disk space alert - check every 4 hours
+THRESHOLD=80
+ALERT_FILE="/tmp/disk_alert.txt"
+
+echo "=== Disk Space Report $(date) ===" > "$ALERT_FILE"
+
+df -h | grep -E '^/dev/' | while read line; do
+  USAGE=$(echo "$line" | awk '{print $5}' | tr -d '%')
+  MOUNT=$(echo "$line" | awk '{print $6}')
+  AVAIL=$(echo "$line" | awk '{print $4}')
+  
+  if [ "$USAGE" -gt "$THRESHOLD" ]; then
+    echo "⚠️  WARNING: $MOUNT at $USAGE% (Available: $AVAIL)" >> "$ALERT_FILE"
+    # Find largest files in that mount
+    echo "   Top 5 largest files:" >> "$ALERT_FILE"
+    find "$MOUNT" -xdev -type f -size +100M 2>/dev/null | head -5 | while read f; do
+      SIZE=$(du -h "$f" 2>/dev/null | cut -f1)
+      echo "     $SIZE  $f" >> "$ALERT_FILE"
+    done
+  else
+    echo "✓ $MOUNT: $USAGE% used (Available: $AVAIL)" >> "$ALERT_FILE"
+  fi
+done
+
+cat "$ALERT_FILE"
+`,
+  },
+]
+
+const FIELDS = ['minute', 'hour', 'dayOfMonth', 'month', 'dayOfWeek']
+const FIELD_LABELS = ['Minute', 'Hour', 'Day/Month', 'Month', 'Day/Week']
+const FIELD_HINTS = ['0-59', '0-23', '1-31', '1-12', '0-7 (0=Sun)']
 
 export default function CronManager() {
-  const [jobs, setJobs]         = useState([])
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState(null)
+  const [jobs, setJobs] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [success, setSuccess] = useState(null)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm]         = useState({ 
-    minute:'*', hour:'*', dayOfMonth:'*', month:'*', dayOfWeek:'*', 
-    command:'', mode: 'cmd', scriptContent: '' 
+  const [showTemplates, setShowTemplates] = useState(false)
+  const [previewScript, setPreviewScript] = useState(null)
+  const [form, setForm] = useState({
+    minute: '*', hour: '*', dayOfMonth: '*', month: '*', dayOfWeek: '*',
+    command: '', mode: 'cmd', scriptContent: '', scriptLang: 'bash'
   })
-  const [saving, setSaving]     = useState(false)
-
-  const [runningJob, setRunningJob] = useState(null)
-  const [runResult, setRunResult]   = useState(null)
-
-  const [showLog, setShowLog]       = useState(false)
-  const [logContent, setLogContent] = useState('')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => { loadJobs() }, [])
 
@@ -45,57 +258,43 @@ export default function CronManager() {
     } finally { setLoading(false) }
   }
 
-  const fetchLogs = async () => {
-    setShowLog(true)
-    setLogContent('Loading logs...')
-    try {
-      const h = await api.get('/shell/files/home')
-      const r = await api.get('/shell/files/read', { 
-        params: { file: `${h.data.home}/.dashboard_scripts/cron.log` } 
-      })
-      setLogContent(r.data.content || 'No logs yet.')
-    } catch (e) {
-      setLogContent('No execution logs found. Tasks will log to ~/.dashboard_scripts/cron.log automatically if created via this UI.')
-    }
-  }
-
-  const runNow = async (command) => {
-    setRunningJob(command)
-    setRunResult(null)
-    try {
-      const r = await api.post('/shell/cron/run', { command })
-      setRunResult(r.data)
-    } catch (e) {
-      setRunResult({ success: false, error: e.response?.data?.error || e.message })
-    } finally {
-      setRunningJob(null)
-    }
-  }
-
   const applyPreset = (preset) => {
     const [m, h, dom, mo, dow] = preset.split(' ')
     setForm(f => ({ ...f, minute: m, hour: h, dayOfMonth: dom, month: mo, dayOfWeek: dow }))
   }
 
+  const applyTemplate = (template) => {
+    const [m, h, dom, mo, dow] = template.schedule.split(' ')
+    setForm(f => ({
+      ...f,
+      minute: m, hour: h, dayOfMonth: dom, month: mo, dayOfWeek: dow,
+      mode: 'script',
+      scriptContent: template.content,
+      scriptLang: template.lang,
+      command: ''
+    }))
+    setShowTemplates(false)
+    setShowForm(true)
+  }
+
   const addJob = async (e) => {
     e.preventDefault()
-    
+
     let finalCommand = form.command
-    let logSuffix = ' >> ~/.dashboard_scripts/cron.log 2>&1'
-    
-    if (form.mode === 'script' || form.mode === 'python') {
-      const content = form.mode === 'python' ? form.pythonContent : form.scriptContent;
-      if (!content.trim()) { setError('Content is required'); return }
+
+    if (form.mode === 'script') {
+      if (!form.scriptContent.trim()) { setError('Script content is required'); return }
       setSaving(true)
       try {
-        const ext = form.mode === 'python' ? 'py' : 'sh'
-        const interpreter = form.mode === 'python' ? 'python3' : 'bash'
-        const scriptName = `cron_${Date.now()}.${ext}`
-        const r = await api.post('/shell/scripts/save', { 
-          name: scriptName, 
-          content: content 
+        const ext = form.scriptLang === 'python' ? '.py' : '.sh'
+        const scriptName = `cron_${Date.now()}${ext}`
+        const r = await api.post('/shell/scripts/save', {
+          name: scriptName,
+          content: form.scriptContent
         })
-        finalCommand = `${interpreter} ${r.data.path}${logSuffix}`
+        finalCommand = form.scriptLang === 'python'
+          ? `python3 ${r.data.path}`
+          : `bash ${r.data.path}`
       } catch (e) {
         setError('Failed to save script: ' + (e.response?.data?.error || e.message))
         setSaving(false)
@@ -104,21 +303,18 @@ export default function CronManager() {
     } else if (!finalCommand.trim()) {
       setError('Command is required')
       return
-    } else {
-      // For raw commands, append log redirect if not present
-      if (!finalCommand.includes('>>')) {
-        finalCommand += logSuffix
-      }
     }
 
     setSaving(true)
     try {
       await api.post('/shell/cron/add', { ...form, command: finalCommand })
-      setForm({ 
-        minute:'*', hour:'*', dayOfMonth:'*', month:'*', dayOfWeek:'*', 
-        command:'', mode: 'cmd', scriptContent: '', pythonContent: '' 
+      setForm({
+        minute: '*', hour: '*', dayOfMonth: '*', month: '*', dayOfWeek: '*',
+        command: '', mode: 'cmd', scriptContent: '', scriptLang: 'bash'
       })
       setShowForm(false)
+      setSuccess('Cron job scheduled successfully!')
+      setTimeout(() => setSuccess(null), 3000)
       loadJobs()
     } catch (e) {
       setError(e.response?.data?.error || 'Failed to add cron job')
@@ -129,214 +325,275 @@ export default function CronManager() {
     if (!confirm('Remove this cron job?')) return
     try {
       await api.post('/shell/cron/remove', { id })
+      setSuccess('Job removed')
+      setTimeout(() => setSuccess(null), 2000)
       loadJobs()
     } catch (e) {
       setError(e.response?.data?.error || 'Failed to remove cron job')
     }
   }
 
-  const cronPreview = `${form.minute} ${form.hour} ${form.dayOfMonth} ${form.month} ${form.dayOfWeek} ${form.command}`
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text)
+    setSuccess('Copied to clipboard!')
+    setTimeout(() => setSuccess(null), 1500)
+  }
+
+  const scheduleDescription = useMemo(() => {
+    const { minute: m, hour: h, dayOfMonth: dom, month: mo, dayOfWeek: dow } = form
+    if (m === '*' && h === '*' && dom === '*' && mo === '*' && dow === '*') return 'Every minute'
+    if (m === '0' && h === '*') return 'Every hour at :00'
+    if (m === '0' && h === '0' && dom === '*' && dow === '*') return 'Daily at midnight'
+    if (dow !== '*' && m !== '*' && h !== '*') return `At ${h}:${m.padStart(2, '0')} on day ${dow}`
+    if (m !== '*' && h !== '*' && dom === '*') return `Daily at ${h}:${m.padStart(2, '0')}`
+    return `${m} ${h} ${dom} ${mo} ${dow}`
+  }, [form])
 
   return (
-    <div className="space-y-4">
-      {/* Log modal */}
+    <div className="space-y-3">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="text-sm font-medium" style={{ color: 'var(--text2)' }}>
+          {jobs.length} scheduled jobs
+        </p>
+        <div className="flex items-center gap-2">
+          <button onClick={loadJobs} className="btn-ghost p-2">
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+          </button>
+          <button onClick={() => setShowTemplates(v => !v)}
+            className="btn-ghost flex items-center gap-1.5 text-sm"
+            style={showTemplates ? { color: 'var(--accent)', borderColor: 'rgba(34,211,238,0.3)' } : {}}>
+            <FileCode size={14} /> Templates
+          </button>
+          <button onClick={() => setShowForm(v => !v)} className="btn-primary flex items-center gap-1.5 text-sm">
+            <Plus size={14} /> New Job
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="banner-error">
+          {error}
+          <button onClick={() => setError(null)} className="ml-auto"><X size={12} /></button>
+        </div>
+      )}
+      {success && (
+        <div className="banner-success">
+          {success}
+        </div>
+      )}
+
+      {/* Script Templates Gallery */}
       <AnimatePresence>
-        {showLog && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95 }}
-              className="card w-full max-w-4xl overflow-hidden flex flex-col max-h-[85vh] border-cyan-500/20">
-              <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
-                <div className="flex items-center gap-3">
-                  <Terminal size={18} className="text-cyan-400" />
-                  <div>
-                    <h3 className="text-sm font-bold">Cron Execution Logs</h3>
-                    <p className="text-[10px] text-white/30 uppercase tracking-widest">~/.dashboard_scripts/cron.log</p>
+        {showTemplates && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden">
+            <div className="card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>📋 Script Templates</p>
+                <button onClick={() => setShowTemplates(false)}><X size={14} style={{ color: 'var(--text3)' }} /></button>
+              </div>
+              <p className="text-xs" style={{ color: 'var(--text3)' }}>
+                Click a template to auto-fill the form with a ready-to-use script
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                {SCRIPT_TEMPLATES.map(t => (
+                  <div key={t.id} className="p-3 rounded-xl transition-all cursor-pointer group"
+                    style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+                    onClick={() => applyTemplate(t)}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-xs font-semibold" style={{ color: 'var(--text)' }}>{t.label}</p>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                        style={{
+                          background: t.lang === 'python' ? 'rgba(59,130,246,0.12)' : 'rgba(52,211,153,0.12)',
+                          color: t.lang === 'python' ? '#3b82f6' : 'var(--green)',
+                          border: `1px solid ${t.lang === 'python' ? 'rgba(59,130,246,0.2)' : 'rgba(52,211,153,0.2)'}`,
+                        }}>
+                        {t.lang.toUpperCase()}
+                      </span>
+                    </div>
+                    <p className="text-[10px] mb-2" style={{ color: 'var(--text3)' }}>{t.desc}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] mono" style={{ color: 'var(--accent)' }}>{t.schedule}</span>
+                      <div className="flex gap-1">
+                        <button onClick={(e) => { e.stopPropagation(); setPreviewScript(t) }}
+                          className="p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                          style={{ color: 'var(--accent)' }}>
+                          <Eye size={11} />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); copyToClipboard(t.content) }}
+                          className="p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                          style={{ color: 'var(--text3)' }}>
+                          <Copy size={11} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Script Preview Modal */}
+      <AnimatePresence>
+        {previewScript && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="modal-backdrop" onClick={() => setPreviewScript(null)}>
+            <motion.div initial={{ scale: 0.94, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.94 }}
+              className="modal-box max-w-2xl" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{previewScript.label}</p>
+                  <p className="text-xs" style={{ color: 'var(--text3)' }}>{previewScript.desc} • Schedule: {previewScript.schedule}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={fetchLogs} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white">
-                    <RefreshCw size={16} />
+                  <button onClick={() => { applyTemplate(previewScript); setPreviewScript(null) }}
+                    className="btn-primary text-xs flex items-center gap-1.5">
+                    <Play size={12} /> Use This
                   </button>
-                  <button onClick={() => setShowLog(false)} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white">
-                    <X size={18} />
-                  </button>
+                  <button onClick={() => setPreviewScript(null)}><X size={16} style={{ color: 'var(--text3)' }} /></button>
                 </div>
               </div>
-              <div className="p-6 overflow-auto bg-[#050608] flex-1 custom-scrollbar">
-                <pre className="text-xs font-mono text-cyan-400/80 leading-relaxed whitespace-pre-wrap">
-                  {logContent}
+              <div className="terminal-wrap" style={{ maxHeight: 400 }}>
+                <div className="terminal-header">
+                  <span className="terminal-dot bg-red-400/60" />
+                  <span className="terminal-dot bg-yellow-400/60" />
+                  <span className="terminal-dot bg-green-400/60" />
+                  <span className="text-xs ml-2 mono" style={{ color: 'var(--text3)' }}>
+                    {previewScript.lang === 'python' ? 'script.py' : 'script.sh'}
+                  </span>
+                </div>
+                <pre className="p-4 text-xs mono overflow-auto" style={{ background: 'var(--code-bg)', color: 'var(--code-text)', maxHeight: 340 }}>
+                  {previewScript.content}
                 </pre>
-              </div>
-              <div className="p-4 border-t border-white/10 bg-white/5 flex justify-between items-center">
-                <p className="text-[10px] text-white/20 italic">Logs are appended automatically for tasks created via this dashboard.</p>
-                <button onClick={() => setShowLog(false)} className="btn-primary py-2 px-6 text-xs font-bold">Close Logs</button>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Run result modal/banner */}
-      <AnimatePresence>
-        {runResult && (
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <div className="card w-full max-w-2xl overflow-hidden flex flex-col max-h-[80vh]">
-              <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
-                <h3 className="text-sm font-bold flex items-center gap-2">
-                  <Terminal size={16} className="text-cyan-400" />
-                  Task Execution Result
-                </h3>
-                <button onClick={() => setRunResult(null)} className="p-1 hover:bg-white/10 rounded">
-                  <X size={18} />
-                </button>
-              </div>
-              <div className="p-4 overflow-auto mono text-xs bg-[#050608] flex-1">
-                {runResult.success ? (
-                  <pre className="text-emerald-400">{runResult.output}</pre>
-                ) : (
-                  <pre className="text-rose-400">{runResult.error || runResult.output}</pre>
-                )}
-              </div>
-              <div className="p-3 border-t border-white/10 bg-white/5 flex justify-end">
-                <button onClick={() => setRunResult(null)} className="btn-primary py-1.5 px-4 text-xs">Close</button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Toolbar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
-            <CalendarClock size={20} className="text-cyan-400" />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-white">Cron Jobs</h2>
-            <p className="text-xs text-white/40">{jobs.length} active schedules</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={loadJobs} className="btn-ghost p-2 rounded-lg bg-white/5">
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          </button>
-          <button onClick={fetchLogs} className="btn-ghost flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white/5 hover:bg-cyan-500/10 transition-all border border-white/5">
-            <Terminal size={14} /> View Logs
-          </button>
-          <button onClick={() => setShowForm(v => !v)} className="btn-primary flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold shadow-lg shadow-cyan-500/20">
-            <Plus size={16} /> New Task
-          </button>
-        </div>
-      </div>
-
-      {error && (
-        <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
-          className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-3">
-          <AlertCircle size={14} />
-          {error}
-          <button onClick={() => setError(null)} className="ml-auto opacity-60 hover:opacity-100"><X size={14} /></button>
-        </motion.div>
-      )}
-
       {/* Add form */}
       <AnimatePresence>
         {showForm && (
           <motion.form onSubmit={addJob}
-            initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-            className="card p-6 space-y-5 overflow-hidden border-cyan-500/30 bg-cyan-500/[0.02]">
+            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+            className="card p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-bold text-white uppercase tracking-wider">Configure Schedule</p>
-              <button type="button" onClick={() => setShowForm(false)} className="text-white/30 hover:text-white">
-                <X size={20} />
+              <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>New Scheduled Task</p>
+              <button type="button" onClick={() => setShowForm(false)}>
+                <X size={15} style={{ color: 'var(--text3)' }} />
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Left: Schedule */}
-              <div className="space-y-4">
-                <div>
-                  <p className="text-[10px] font-bold text-white/30 uppercase mb-2 tracking-widest">Presets</p>
-                  <div className="flex flex-wrap gap-2">
-                    {PRESETS.map(p => (
-                      <button key={p.value} type="button" onClick={() => applyPreset(p.value)}
-                        className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[10px] font-bold hover:bg-cyan-500/10 hover:border-cyan-500/30 transition-all">
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-5 gap-2">
-                  {FIELDS.map((field, i) => (
-                    <div key={field}>
-                      <label className="text-[10px] font-bold text-white/30 block mb-1 uppercase text-center">
-                        {FIELD_LABELS[i]}
-                      </label>
-                      <input value={form[field]} onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
-                        className="w-full bg-black/40 border border-white/10 rounded-lg py-2 text-center mono text-sm focus:border-cyan-500/50 outline-none" 
-                        placeholder={FIELD_HINTS[i]} />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
-                  <p className="text-[10px] font-bold text-white/20 uppercase">Schedule Preview</p>
-                  <p className="mono text-sm text-cyan-400">{form.minute} {form.hour} {form.dayOfMonth} {form.month} {form.dayOfWeek}</p>
-                </div>
-              </div>
-
-              {/* Right: Task */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Execution Mode</p>
-                  <div className="flex bg-black/40 p-1 rounded-xl border border-white/5">
-                    {['cmd', 'script', 'python'].map(m => (
-                      <button key={m} type="button" onClick={() => setForm(f => ({ ...f, mode: m }))}
-                        className={clsx(
-                          "px-3 py-1 rounded-lg text-[10px] font-bold transition-all uppercase",
-                          form.mode === m ? "bg-cyan-500 text-black shadow-lg" : "text-white/40 hover:text-white"
-                        )}>
-                        {m === 'cmd' ? 'Shell' : m}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {form.mode === 'cmd' ? (
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-white/30 uppercase">Command Line</label>
-                    <input value={form.command} onChange={e => setForm(f => ({ ...f, command: e.target.value }))}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 mono text-sm text-cyan-400 focus:border-cyan-500/50 outline-none" 
-                      placeholder="e.g. curl https://api.health.com/check" />
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-bold text-white/30 uppercase">{form.mode} Script</label>
-                      <span className="text-[10px] mono text-white/20">{form.mode === 'python' ? 'app.py' : 'worker.sh'}</span>
-                    </div>
-                    <div className="rounded-xl overflow-hidden border border-white/10">
-                      <textarea 
-                        value={form.mode === 'python' ? form.pythonContent : form.scriptContent} 
-                        onChange={e => setForm(f => ({ ...f, [form.mode === 'python' ? 'pythonContent' : 'scriptContent']: e.target.value }))}
-                        className="w-full h-40 bg-[#0a0b10] p-4 text-xs mono text-cyan-400 outline-none resize-none leading-relaxed"
-                        placeholder={form.mode === 'python' ? 'import os\nprint("Hello from Python")' : '#!/bin/bash\necho "Hello from Shell"'}
-                      />
-                    </div>
-                  </div>
-                )}
+            {/* Presets */}
+            <div>
+              <p className="text-xs mb-2" style={{ color: 'var(--text3)' }}>Quick presets</p>
+              <div className="flex flex-wrap gap-1.5">
+                {PRESETS.map(p => (
+                  <button key={p.value} type="button" onClick={() => applyPreset(p.value)}
+                    className="btn-ghost py-1 px-2.5 text-[11px]">{p.label}</button>
+                ))}
               </div>
             </div>
 
-            <div className="flex gap-3 justify-end pt-2">
-              <button type="button" onClick={() => setShowForm(false)} className="px-6 py-2 rounded-xl text-sm font-bold text-white/40 hover:text-white transition-colors">
-                Cancel
-              </button>
+            {/* Schedule fields */}
+            <div className="grid grid-cols-5 gap-2">
+              {FIELDS.map((field, i) => (
+                <div key={field}>
+                  <label className="text-[11px] block mb-1" style={{ color: 'var(--text3)' }}>
+                    {FIELD_LABELS[i]}
+                  </label>
+                  <input value={form[field]} onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
+                    className="input text-center mono text-sm py-2" placeholder={FIELD_HINTS[i]} />
+                </div>
+              ))}
+            </div>
+
+            {/* Human-readable schedule */}
+            <div className="px-3 py-2 rounded-lg text-xs flex items-center gap-2"
+              style={{ background: 'rgba(34,211,238,0.06)', border: '1px solid rgba(34,211,238,0.12)' }}>
+              <Clock size={12} style={{ color: 'var(--accent)' }} />
+              <span style={{ color: 'var(--accent)' }}>{scheduleDescription}</span>
+            </div>
+
+            {/* Command / Script Selector */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs block" style={{ color: 'var(--text3)' }}>Task Execution</label>
+                <div className="flex gap-1.5">
+                  <button type="button" onClick={() => setForm(f => ({ ...f, mode: 'cmd' }))}
+                    className={clsx("text-[10px] font-bold px-2.5 py-1 rounded transition-all", form.mode === 'cmd' ? "bg-cyan-500 text-black" : "bg-white/5 text-white/30")}>
+                    COMMAND
+                  </button>
+                  <button type="button" onClick={() => setForm(f => ({ ...f, mode: 'script', scriptLang: 'bash' }))}
+                    className={clsx("text-[10px] font-bold px-2.5 py-1 rounded transition-all", form.mode === 'script' && form.scriptLang === 'bash' ? "bg-emerald-500 text-black" : "bg-white/5 text-white/30")}>
+                    BASH SCRIPT
+                  </button>
+                  <button type="button" onClick={() => setForm(f => ({ ...f, mode: 'script', scriptLang: 'python' }))}
+                    className={clsx("text-[10px] font-bold px-2.5 py-1 rounded transition-all", form.mode === 'script' && form.scriptLang === 'python' ? "bg-blue-500 text-white" : "bg-white/5 text-white/30")}>
+                    PYTHON
+                  </button>
+                </div>
+              </div>
+
+              {form.mode === 'script' ? (
+                <div className="space-y-2">
+                  <div className="terminal-wrap" style={{ height: '220px' }}>
+                    <div className="terminal-header">
+                      <span className="terminal-dot bg-red-400/60" />
+                      <span className="terminal-dot bg-yellow-400/60" />
+                      <span className="terminal-dot bg-green-400/60" />
+                      <span className="text-[10px] ml-2 mono" style={{ color: 'var(--text3)' }}>
+                        {form.scriptLang === 'python' ? 'task.py' : 'task.sh'}
+                      </span>
+                      <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded"
+                        style={{
+                          background: form.scriptLang === 'python' ? 'rgba(59,130,246,0.15)' : 'rgba(52,211,153,0.15)',
+                          color: form.scriptLang === 'python' ? '#60a5fa' : '#34d399',
+                        }}>
+                        {form.scriptLang.toUpperCase()}
+                      </span>
+                    </div>
+                    <textarea
+                      value={form.scriptContent || (form.scriptLang === 'python'
+                        ? '#!/usr/bin/env python3\n\nimport datetime\n\nprint(f"Task executed at {datetime.datetime.now()}")\n# Add your Python logic here\n'
+                        : '#!/bin/bash\n\necho "Task executed at $(date)"\n# Add your shell commands here\n'
+                      )}
+                      onChange={e => setForm(f => ({ ...f, scriptContent: e.target.value }))}
+                      className="w-full h-[175px] p-4 text-xs mono outline-none resize-none leading-relaxed"
+                      style={{ background: 'var(--code-bg)', color: 'var(--code-text)' }}
+                      spellCheck={false}
+                    />
+                  </div>
+                  <p className="text-[10px] italic" style={{ color: 'var(--text3)' }}>
+                    Script will be saved to ~/.dashboard_scripts/ and scheduled automatically.
+                  </p>
+                </div>
+              ) : (
+                <input value={form.command} onChange={e => setForm(f => ({ ...f, command: e.target.value }))}
+                  className="input mono" placeholder="e.g. /usr/bin/python3 /path/to/app.py  or  systemctl restart nginx" />
+              )}
+            </div>
+
+            {/* Preview */}
+            <div className="code-block text-xs">
+              <span style={{ color: 'var(--text3)' }}>crontab: </span>
+              <span style={{ color: 'var(--accent)' }}>
+                {form.minute} {form.hour} {form.dayOfMonth} {form.month} {form.dayOfWeek}{' '}
+                {form.mode === 'script'
+                  ? `${form.scriptLang === 'python' ? 'python3' : 'bash'} ~/.dashboard_scripts/[auto].${form.scriptLang === 'python' ? 'py' : 'sh'}`
+                  : (form.command || '[command]')}
+              </span>
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => setShowForm(false)} className="btn-ghost">Cancel</button>
               <button type="submit" disabled={saving}
-                className="btn-primary flex items-center gap-2 px-8 py-2 rounded-xl text-sm font-bold shadow-lg shadow-cyan-500/20 disabled:opacity-50">
-                {saving ? <RefreshCw size={16} className="animate-spin" /> : <Check size={16} />}
+                className="btn-primary flex items-center gap-1.5 disabled:opacity-40">
+                {saving ? <RefreshCw size={13} className="animate-spin" /> : <Check size={13} />}
                 Schedule Task
               </button>
             </div>
@@ -345,55 +602,56 @@ export default function CronManager() {
       </AnimatePresence>
 
       {/* Jobs list */}
-      <div className="space-y-3">
+      <div className="card overflow-hidden">
         {loading ? (
-          <div className="py-20 text-center space-y-4">
-            <RefreshCw size={40} className="mx-auto animate-spin text-cyan-500/20" />
-            <p className="text-sm text-white/20 font-mono tracking-widest uppercase">Fetching crontab...</p>
-          </div>
+          <div className="py-12 text-center text-xs" style={{ color: 'var(--text3)' }}>Loading...</div>
         ) : jobs.length === 0 ? (
-          <div className="card p-20 text-center bg-white/[0.01]">
-            <CalendarClock size={48} className="mx-auto mb-4 text-white/5" />
-            <p className="text-sm text-white/40 mb-6">No scheduled tasks found in crontab</p>
-            <button onClick={() => setShowForm(true)} className="btn-primary px-6 py-2 rounded-xl text-sm font-bold">
-              Create First Task
-            </button>
+          <div className="py-12 text-center">
+            <CalendarClock size={32} className="mx-auto mb-3" style={{ color: 'var(--border)' }} />
+            <p className="text-xs mb-2" style={{ color: 'var(--text3)' }}>No cron jobs scheduled</p>
+            <p className="text-[10px] mb-4" style={{ color: 'var(--text3)' }}>
+              Use templates above or create a custom job
+            </p>
+            <div className="flex gap-2 justify-center">
+              <button onClick={() => setShowTemplates(true)} className="btn-ghost text-xs flex items-center gap-1.5">
+                <FileCode size={12} /> Browse Templates
+              </button>
+              <button onClick={() => setShowForm(true)} className="btn-primary text-xs">
+                <Plus size={12} className="inline mr-1" /> Create Job
+              </button>
+            </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3">
+          <div style={{ borderTop: '1px solid var(--border2)' }}>
             {jobs.map((job, i) => (
               <motion.div key={i}
-                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                className="card p-4 group hover:border-cyan-500/30 transition-all bg-white/[0.02]">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-cyan-500/5 border border-cyan-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-cyan-500/10 transition-colors">
-                    <Clock size={20} className="text-cyan-400/60 group-hover:text-cyan-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 text-[10px] font-bold mono">
-                        {job.schedule}
-                      </span>
-                      {job.command.includes('.py') && <span className="text-[9px] text-yellow-500/60 font-bold uppercase tracking-wider">Python</span>}
-                      {job.command.includes('.sh') && <span className="text-[9px] text-blue-500/60 font-bold uppercase tracking-wider">Shell</span>}
-                    </div>
-                    <p className="text-sm mono text-white truncate" title={job.command}>{job.command}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => runNow(job.command)}
-                      disabled={runningJob === job.command}
-                      className="p-2.5 rounded-xl bg-emerald-500/5 text-emerald-500 border border-emerald-500/10 hover:bg-emerald-500/20 transition-all"
-                      title="Run Now">
-                      {runningJob === job.command ? <RefreshCw size={16} className="animate-spin" /> : <Play size={16} />}
-                    </button>
-                    <button onClick={() => removeJob(job.id)}
-                      className="p-2.5 rounded-xl bg-rose-500/5 text-rose-500 border border-rose-500/10 hover:bg-rose-500/20 transition-all"
-                      title="Remove">
-                      <Trash2 size={16} />
-                    </button>
+                initial={{ opacity: 0, x: -6 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.04 }}
+                className="flex items-center gap-4 px-4 py-3 group"
+                style={{ borderBottom: '1px solid var(--border2)' }}>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ background: 'rgba(34,211,238,0.08)', border: '1px solid rgba(34,211,238,0.15)' }}>
+                  <Clock size={14} style={{ color: 'var(--accent)' }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm mono truncate" style={{ color: 'var(--text)' }}>{job.command}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-xs mono" style={{ color: 'var(--accent)' }}>{job.schedule}</span>
+                    {job.command?.includes('.py') && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                        style={{ background: 'rgba(59,130,246,0.1)', color: '#60a5fa' }}>PY</span>
+                    )}
+                    {job.command?.includes('.sh') && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                        style={{ background: 'rgba(52,211,153,0.1)', color: '#34d399' }}>SH</span>
+                    )}
                   </div>
                 </div>
+                <button onClick={() => removeJob(job.id)}
+                  className="btn-danger py-1 px-2.5 text-xs flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Trash2 size={11} /> Remove
+                </button>
               </motion.div>
             ))}
           </div>

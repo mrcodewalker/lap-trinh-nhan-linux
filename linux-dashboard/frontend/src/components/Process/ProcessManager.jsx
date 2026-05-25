@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   RefreshCw, Trash2, Search, Info, X, AlertTriangle,
@@ -8,18 +8,18 @@ import api from '../../utils/api'
 
 const SIGNALS = [
   { name: 'SIGTERM', desc: 'Graceful terminate', color: '#f59e0b' },
-  { name: 'SIGKILL', desc: 'Force kill',         color: '#ef4444' },
-  { name: 'SIGHUP',  desc: 'Reload config',      color: '#10b981' },
-  { name: 'SIGINT',  desc: 'Interrupt (Ctrl+C)', color: '#3b82f6' },
-  { name: 'SIGSTOP', desc: 'Pause process',      color: '#8b5cf6' },
-  { name: 'SIGCONT', desc: 'Resume process',     color: '#06b6d4' },
+  { name: 'SIGKILL', desc: 'Force kill', color: '#ef4444' },
+  { name: 'SIGHUP', desc: 'Reload config', color: '#10b981' },
+  { name: 'SIGINT', desc: 'Interrupt (Ctrl+C)', color: '#3b82f6' },
+  { name: 'SIGSTOP', desc: 'Pause process', color: '#8b5cf6' },
+  { name: 'SIGCONT', desc: 'Resume process', color: '#06b6d4' },
 ]
 
 const cpuColor = (v) => {
   const n = parseFloat(v)
   if (n > 50) return 'var(--red)'
   if (n > 20) return 'var(--yellow)'
-  if (n > 5)  return 'var(--green)'
+  if (n > 5) return 'var(--green)'
   return 'var(--text3)'
 }
 
@@ -34,19 +34,19 @@ const statBadge = (stat) => {
 }
 
 export default function ProcessManager() {
-  const [processes, setProcesses]     = useState([])
-  const [loading, setLoading]         = useState(false)
-  const [error, setError]             = useState(null)
-  const [search, setSearch]           = useState('')
-  const [sortBy, setSortBy]           = useState('cpu')
-  const [sortDir, setSortDir]         = useState('desc')
-  const [modal, setModal]             = useState(null)
-  const [procInfo, setProcInfo]       = useState('')
-  const [signal, setSignal]           = useState('SIGTERM')
-  const [killResult, setKillResult]   = useState(null)
+  const [processes, setProcesses] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState('cpu')
+  const [sortDir, setSortDir] = useState('desc')
+  const [modal, setModal] = useState(null)
+  const [procInfo, setProcInfo] = useState('')
+  const [signal, setSignal] = useState('SIGTERM')
+  const [killResult, setKillResult] = useState(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
-  const [filterUser, setFilterUser]   = useState('all')
-  const [users, setUsers]             = useState([])
+  const [filterUser, setFilterUser] = useState('all')
+  const [users, setUsers] = useState([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -91,20 +91,20 @@ export default function ProcessManager() {
     else { setSortBy(col); setSortDir('desc') }
   }
 
-  const sorted = [...processes]
+  const sorted = useMemo(() => [...processes]
     .filter(p => {
       const matchSearch = p.command?.toLowerCase().includes(search.toLowerCase()) || p.pid?.includes(search)
-      const matchUser   = filterUser === 'all' || p.user === filterUser
+      const matchUser = filterUser === 'all' || p.user === filterUser
       return matchSearch && matchUser
     })
     .sort((a, b) => {
       let va, vb
-      if (sortBy === 'cpu')      { va = parseFloat(a.cpu); vb = parseFloat(b.cpu) }
+      if (sortBy === 'cpu') { va = parseFloat(a.cpu); vb = parseFloat(b.cpu) }
       else if (sortBy === 'mem') { va = parseFloat(a.mem); vb = parseFloat(b.mem) }
-      else if (sortBy === 'pid') { va = parseInt(a.pid);   vb = parseInt(b.pid) }
+      else if (sortBy === 'pid') { va = parseInt(a.pid); vb = parseInt(b.pid) }
       else return 0
       return sortDir === 'desc' ? vb - va : va - vb
-    })
+    }), [processes, search, filterUser, sortBy, sortDir])
 
   const SortIcon = ({ col }) => sortBy === col
     ? (sortDir === 'desc' ? <ChevronDown size={11} className="inline ml-0.5" /> : <ChevronUp size={11} className="inline ml-0.5" />)
@@ -127,7 +127,7 @@ export default function ProcessManager() {
         </select>
 
         <div className="flex items-center gap-1">
-          {['cpu','mem','pid'].map(s => (
+          {['cpu', 'mem', 'pid'].map(s => (
             <button key={s} onClick={() => toggleSort(s)}
               className="btn-ghost py-1.5 px-2.5 text-xs uppercase"
               style={sortBy === s ? { color: 'var(--accent)', borderColor: 'rgba(34,211,238,0.3)' } : {}}>
@@ -171,11 +171,8 @@ export default function ProcessManager() {
               </tr>
             </thead>
             <tbody>
-              {sorted.slice(0, 40).map((proc, i) => (
-                <motion.tr key={proc.pid}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: Math.min(i * 0.008, 0.3) }}
+              {sorted.slice(0, 50).map((proc, i) => (
+                <tr key={proc.pid}
                   className="group cursor-pointer"
                   onClick={() => { setModal({ type: 'info', data: proc }); loadInfo(proc.pid) }}>
                   <td className="font-mono font-semibold" style={{ color: 'var(--accent)' }}>{proc.pid}</td>
@@ -209,7 +206,7 @@ export default function ProcessManager() {
                       </button>
                     </div>
                   </td>
-                </motion.tr>
+                </tr>
               ))}
             </tbody>
           </table>
@@ -248,12 +245,12 @@ export default function ProcessManager() {
 
                   <div className="grid grid-cols-3 gap-2 mb-4">
                     {[
-                      { icon: Cpu,      label: 'CPU',   value: modal.data.cpu + '%', color: cpuColor(modal.data.cpu) },
-                      { icon: Activity, label: 'MEM',   value: modal.data.mem + '%', color: 'var(--accent2)' },
-                      { icon: User,     label: 'User',  value: modal.data.user,      color: 'var(--accent)' },
-                      { icon: Activity, label: 'State', value: modal.data.stat,      color: 'var(--green)' },
-                      { icon: Clock,    label: 'Start', value: modal.data.start,     color: 'var(--yellow)' },
-                      { icon: Clock,    label: 'Time',  value: modal.data.time,      color: 'var(--pink)' },
+                      { icon: Cpu, label: 'CPU', value: modal.data.cpu + '%', color: cpuColor(modal.data.cpu) },
+                      { icon: Activity, label: 'MEM', value: modal.data.mem + '%', color: 'var(--accent2)' },
+                      { icon: User, label: 'User', value: modal.data.user, color: 'var(--accent)' },
+                      { icon: Activity, label: 'State', value: modal.data.stat, color: 'var(--green)' },
+                      { icon: Clock, label: 'Start', value: modal.data.start, color: 'var(--yellow)' },
+                      { icon: Clock, label: 'Time', value: modal.data.time, color: 'var(--pink)' },
                     ].map(({ icon: Icon, label, value, color }) => (
                       <div key={label} className="card p-3">
                         <div className="flex items-center gap-1.5 mb-1">
