@@ -219,7 +219,7 @@ export default function FileManager() {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex gap-4 min-h-0">
+      <div className="flex-1 flex gap-4 min-h-0 overflow-hidden">
         {/* File List/Grid */}
         <div className={clsx(
           "flex-1 bg-black/20 border border-white/5 rounded-2xl overflow-auto custom-scrollbar p-4",
@@ -304,7 +304,7 @@ export default function FileManager() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              className="w-72 bg-black/40 border border-white/10 rounded-2xl p-5 flex flex-col gap-6"
+              className="w-72 shrink-0 bg-black/40 border border-white/10 rounded-2xl p-5 flex flex-col gap-6 overflow-y-auto max-h-full"
             >
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-white/40">Item Properties</h3>
