@@ -33,6 +33,13 @@ const formatSize = (bytes) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
+// Convert single octal digit to rwx string
+const permStr = (digit) => {
+  if (!digit) return '---'
+  const n = parseInt(digit, 10)
+  return (n & 4 ? 'r' : '-') + (n & 2 ? 'w' : '-') + (n & 1 ? 'x' : '-')
+}
+
 export default function FileManager() {
   const [files, setFiles] = useState([])
   const [currentDir, setCurrentDir] = useState('/home')
@@ -43,6 +50,13 @@ export default function FileManager() {
   const [selected, setSelected] = useState(null)
   const [renaming, setRenaming] = useState(null) // { oldName: '', newName: '' }
   const [isRenaming, setIsRenaming] = useState(false)
+  const [chmodMode, setChmodMode] = useState('')
+  const [chmodBusy, setChmodBusy] = useState(false)
+  const [chmodResult, setChmodResult] = useState(null)
+  const [createModal, setCreateModal] = useState(null) // 'file' | 'folder' | null
+  const [createName, setCreateName] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [chmodModal, setChmodModal] = useState(false)
 
   const loadFiles = useCallback(async (dir = currentDir) => {
     setLoading(true)
@@ -106,6 +120,43 @@ export default function FileManager() {
     }
   }
 
+  const handleChmod = async (mode) => {
+    if (!selected || !mode) return
+    setChmodBusy(true)
+    setChmodResult(null)
+    try {
+      const filePath = `${currentDir}/${selected.name}`.replace(/\/+/g, '/')
+      await api.post('/shell/files/chmod', { file: filePath, mode })
+      setChmodResult({ success: true, msg: `chmod ${mode} applied` })
+      loadFiles()
+    } catch (err) {
+      setChmodResult({ success: false, msg: err.response?.data?.error || 'chmod failed' })
+    } finally {
+      setChmodBusy(false)
+    }
+  }
+
+  const handleCreate = async (e) => {
+    e.preventDefault()
+    if (!createName.trim()) return
+    setCreating(true)
+    try {
+      const fullPath = `${currentDir}/${createName.trim()}`.replace(/\/+/g, '/')
+      if (createModal === 'folder') {
+        await api.post('/shell/files/mkdir', { dir: fullPath })
+      } else {
+        await api.post('/shell/files/create', { file: fullPath, content: '' })
+      }
+      setCreateModal(null)
+      setCreateName('')
+      loadFiles()
+    } catch (err) {
+      setError(err.response?.data?.error || `Failed to create ${createModal}`)
+    } finally {
+      setCreating(false)
+    }
+  }
+
   const filteredFiles = files.filter(f => f.name.toLowerCase().includes(search.toLowerCase()))
 
   return (
@@ -146,6 +197,130 @@ export default function FileManager() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Create File/Folder Modal */}
+      <AnimatePresence>
+        {createModal && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="modal-backdrop z-[100]" onClick={() => setCreateModal(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9 }}
+              className="modal-box max-w-sm" onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold uppercase tracking-widest">
+                  {createModal === 'folder' ? 'New Folder' : 'New File'}
+                </h3>
+                <button onClick={() => setCreateModal(null)}><X size={16} /></button>
+              </div>
+              <form onSubmit={handleCreate} className="space-y-4">
+                <div>
+                  <label className="text-[10px] uppercase text-white/20 font-bold mb-1 block">
+                    {createModal === 'folder' ? 'Folder name' : 'File name'}
+                  </label>
+                  <input 
+                    autoFocus
+                    value={createName}
+                    onChange={e => setCreateName(e.target.value)}
+                    placeholder={createModal === 'folder' ? 'my-folder' : 'file.txt'}
+                    className="input w-full font-mono"
+                  />
+                </div>
+                <p className="text-[10px] text-white/30 font-mono">
+                  Path: {currentDir}/{createName || '...'}
+                </p>
+                <div className="flex gap-2 justify-end">
+                  <button type="button" onClick={() => setCreateModal(null)} className="btn-ghost text-xs">Cancel</button>
+                  <button type="submit" disabled={creating || !createName.trim()} className="btn-primary text-xs px-6">
+                    {creating ? 'Creating...' : 'Create'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Chmod Modal (standalone, when no sidebar) */}
+      <AnimatePresence>
+        {chmodModal && selected && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="modal-backdrop z-[100]" onClick={() => setChmodModal(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9 }}
+              className="modal-box max-w-sm" onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold uppercase tracking-widest flex items-center gap-2">
+                  <Lock size={14} className="text-cyan-400" /> Change Permissions
+                </h3>
+                <button onClick={() => setChmodModal(false)}><X size={16} /></button>
+              </div>
+              <p className="text-xs text-white/50 font-mono mb-3 truncate">{selected.name}</p>
+              <p className="text-[10px] text-white/30 mb-3">Current: <span className="text-cyan-400 font-mono">{selected.permissions}</span></p>
+
+              {/* Presets */}
+              <div className="grid grid-cols-4 gap-2 mb-4">
+                {['644', '755', '700', '777', '600', '750', '664', '775'].map(m => (
+                  <button
+                    key={m}
+                    onClick={() => { handleChmod(m); setChmodModal(false) }}
+                    disabled={chmodBusy}
+                    className={clsx(
+                      "py-2 rounded-lg text-xs font-mono font-bold transition-all border",
+                      selected.permissions === m
+                        ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-400"
+                        : "bg-white/5 border-white/10 text-white/50 hover:bg-cyan-500/10 hover:text-cyan-400 hover:border-cyan-500/30"
+                    )}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom */}
+              <div className="flex gap-2">
+                <input
+                  value={chmodMode}
+                  onChange={e => setChmodMode(e.target.value)}
+                  placeholder="Custom (e.g. 640)"
+                  maxLength={4}
+                  className="flex-1 input font-mono text-xs"
+                />
+                <button
+                  onClick={() => { handleChmod(chmodMode); setChmodModal(false) }}
+                  disabled={chmodBusy || !chmodMode.trim()}
+                  className="btn-primary text-xs px-4"
+                >
+                  Apply
+                </button>
+              </div>
+
+              {/* Visual */}
+              {selected.permissions && (
+                <div className="flex items-center gap-3 text-[10px] font-mono text-white/30 mt-4 pt-3 border-t border-white/5">
+                  <span><span className="text-white/50">u:</span> <span className="text-green-400">{permStr(selected.permissions?.[0])}</span></span>
+                  <span><span className="text-white/50">g:</span> <span className="text-yellow-400">{permStr(selected.permissions?.[1])}</span></span>
+                  <span><span className="text-white/50">o:</span> <span className="text-red-400">{permStr(selected.permissions?.[2])}</span></span>
+                </div>
+              )}
+
+              {chmodResult && (
+                <div className={clsx(
+                  "text-[11px] px-2 py-1.5 rounded-lg mt-3",
+                  chmodResult.success ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"
+                )}>
+                  {chmodResult.msg}
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}
@@ -216,6 +391,52 @@ export default function FileManager() {
           {/* Linux-concept explainer */}
           <ExplainPanel concept="chmod" label="chmod" />
         </div>
+      </div>
+
+      {/* Action Bar — tạo, sửa, xóa, đổi quyền */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          onClick={() => { setCreateModal('file'); setCreateName('') }}
+          className="btn-ghost py-1.5 px-3 text-xs flex items-center gap-1.5 hover:border-cyan-500/30 hover:text-cyan-400"
+        >
+          <FilePlus size={13} /> New File
+        </button>
+        <button
+          onClick={() => { setCreateModal('folder'); setCreateName('') }}
+          className="btn-ghost py-1.5 px-3 text-xs flex items-center gap-1.5 hover:border-cyan-500/30 hover:text-cyan-400"
+        >
+          <FolderPlus size={13} /> New Folder
+        </button>
+
+        <div className="h-4 w-px bg-white/10 mx-1" />
+
+        <button
+          onClick={() => { if (selected) setRenaming({ oldName: selected.name, newName: selected.name }) }}
+          disabled={!selected}
+          className="btn-ghost py-1.5 px-3 text-xs flex items-center gap-1.5 disabled:opacity-30"
+        >
+          <Edit2 size={13} /> Rename
+        </button>
+        <button
+          onClick={() => { if (selected) handleDelete(selected) }}
+          disabled={!selected}
+          className="btn-ghost py-1.5 px-3 text-xs flex items-center gap-1.5 disabled:opacity-30 hover:border-red-500/30 hover:text-red-400"
+        >
+          <Trash2 size={13} /> Delete
+        </button>
+        <button
+          onClick={() => { if (selected) { setChmodMode(''); setChmodResult(null); setChmodModal(true) } }}
+          disabled={!selected}
+          className="btn-ghost py-1.5 px-3 text-xs flex items-center gap-1.5 disabled:opacity-30 hover:border-purple-500/30 hover:text-purple-400"
+        >
+          <Lock size={13} /> chmod
+        </button>
+
+        {selected && (
+          <span className="ml-auto text-[10px] text-white/30 font-mono truncate max-w-[200px]">
+            Selected: {selected.name}
+          </span>
+        )}
       </div>
 
       {/* Main Content Area */}
@@ -333,6 +554,77 @@ export default function FileManager() {
                     <span className="text-xs text-white/70 font-mono">{item.value}</span>
                   </div>
                 ))}
+              </div>
+
+              {/* chmod section */}
+              <div className="space-y-2 border-t border-white/5 pt-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] uppercase text-white/20 font-bold flex items-center gap-1.5">
+                    <Lock size={10} /> Change Permissions
+                  </span>
+                  <ExplainPanel concept="chmod" label="?" size="sm" />
+                </div>
+
+                {/* Preset buttons */}
+                <div className="grid grid-cols-4 gap-1.5">
+                  {['644', '755', '700', '777'].map(m => (
+                    <button
+                      key={m}
+                      onClick={() => handleChmod(m)}
+                      disabled={chmodBusy}
+                      className={clsx(
+                        "py-1.5 rounded-lg text-[11px] font-mono font-bold transition-all border",
+                        selected.permissions === m
+                          ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-400"
+                          : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white/80"
+                      )}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom input */}
+                <div className="flex gap-1.5">
+                  <input
+                    value={chmodMode}
+                    onChange={e => setChmodMode(e.target.value)}
+                    placeholder="e.g. 640"
+                    maxLength={4}
+                    className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-1.5 text-xs font-mono outline-none focus:border-cyan-500/50 transition-all"
+                  />
+                  <button
+                    onClick={() => handleChmod(chmodMode)}
+                    disabled={chmodBusy || !chmodMode.trim()}
+                    className="px-3 py-1.5 rounded-lg bg-cyan-500 text-black text-[11px] font-bold hover:bg-cyan-400 disabled:opacity-30 transition-all"
+                  >
+                    {chmodBusy ? '...' : 'Apply'}
+                  </button>
+                </div>
+
+                {/* Permission visual breakdown */}
+                {selected.permissions && (
+                  <div className="flex items-center gap-2 text-[10px] font-mono text-white/30 mt-1">
+                    <span className="text-white/50">owner:</span>
+                    <span className="text-green-400">{permStr(selected.permissions?.[0])}</span>
+                    <span className="text-white/50">group:</span>
+                    <span className="text-yellow-400">{permStr(selected.permissions?.[1])}</span>
+                    <span className="text-white/50">other:</span>
+                    <span className="text-red-400">{permStr(selected.permissions?.[2])}</span>
+                  </div>
+                )}
+
+                {/* Result feedback */}
+                {chmodResult && (
+                  <div className={clsx(
+                    "text-[11px] px-2 py-1.5 rounded-lg",
+                    chmodResult.success
+                      ? "bg-green-500/10 text-green-400 border border-green-500/20"
+                      : "bg-red-500/10 text-red-400 border border-red-500/20"
+                  )}>
+                    {chmodResult.msg}
+                  </div>
+                )}
               </div>
 
               <div className="mt-auto grid grid-cols-2 gap-2">
